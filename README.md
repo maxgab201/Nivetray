@@ -18,7 +18,7 @@ The optional fourth title-bar button is **designed, not implemented** in this MV
 
 ## Requirements and build
 
-- Windows 10 version 1607 or later, or Windows 11; x64 / ARM64.
+- Windows 10/11 are the target platforms; local execution has been verified on Windows 11 x64. Windows 10 and ARM64 execution still need compatibility runs. Microsoft's [.NET supported OS policy](https://github.com/dotnet/core/blob/main/release-notes/10.0/supported-os.md) applies to runtime vendor support, including the Windows 10 edition/lifecycle restrictions.
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) for building. Visual Studio with the .NET desktop workload is optional.
 
 ```powershell

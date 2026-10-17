@@ -7,9 +7,9 @@
 - Dependency-free tests: 28 deterministic assertions covering filtering, explicit exceptions, sibling windows, duplicate hides, PID reuse, process-start reuse, same-process HWND generation reuse, stale selections, denied access, unconfirmed asynchronous requests, retry recovery, restore-all and JSON handling.
 - Interactive native tests: 7 additional assertions with two windows owned by a dedicated fixture. Hiding one leaves the other visible; a loopback TCP server responds while hidden; process stays alive; restore-all confirms visibility; destroying the fixture invalidates identity. Total: **35 assertions passed**.
 - WPF UI Automation smoke: search, select fixture, hide, restore individually, hide again, then exit through Settings. Both fixture windows are confirmed visible after Nivetray exits. The test also opens the panel through the tray double-click event path.
-- Self-contained `win-x64` portable publish and ZIP generation succeeded. ZIP includes the full runtime and MIT license; no runtime installation is required.
+- Self-contained `win-x64` portable publish and ZIP generation succeeded; the published executable also passed the same WPF end-to-end smoke test. ZIP includes the full runtime and MIT license; no runtime installation is required.
 
-A short warmed-up idle sample recorded 0% of one CPU core over two seconds, approximately 179 MiB private memory and 232 MiB working set with the panel open. This is a single development-machine observation, not a benchmark or guaranteed memory budget. WPF/runtime overhead and executable-icon loading remain optimization opportunities. The app has no idle polling loop.
+Short warmed-up idle samples recorded 0% of one CPU core over two seconds, approximately 179–201 MiB private memory and 232–260 MiB working set with the panel open. These are development-machine observations, not a benchmark or guaranteed memory budget. WPF/runtime overhead and executable-icon loading remain optimization opportunities. The app has no idle polling loop.
 
 ## Automated pipeline
 
