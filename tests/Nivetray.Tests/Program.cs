@@ -58,6 +58,14 @@ internal static class Program
         Check((await manager.RestoreAsync(manager.Hidden.Single())).Success, "restore succeeds");
         Check(fake.IsVisible(w.Identity) && manager.Hidden.Count == 0, "restored entry removed");
         Check(fake.Commands.Last() == 3, "original maximized state passed to restore");
+        await manager.HideAsync(w);
+        var previousEntry = manager.Hidden.Single();
+        await manager.RestoreAsync(previousEntry);
+        await manager.HideAsync(w);
+        var oldCalls = fake.Commands.Count;
+        Check(!(await manager.RestoreAsync(previousEntry)).Success && fake.Commands.Count == oldCalls,
+            "stale recovery entry cannot restore a later hide of the same window");
+        await manager.RestoreAllAsync();
 
         foreach (var replacement in new[] { Window(pid: 43), Window(start: 9999), Window(generation: 12) })
         {

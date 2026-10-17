@@ -12,6 +12,7 @@ public sealed class Win32WindowPlatform(Action<string> log) : IWindowPlatform, I
     private readonly string property = "Nivetray." + Guid.NewGuid().ToString("N");
     private readonly string generationProperty = "Nivetray.Generation." + Guid.NewGuid().ToString("N");
     private readonly Dictionary<nint, WindowIdentity> observed = [];
+    private nint nextGeneration;
     private static readonly HashSet<string> SystemClasses = new(StringComparer.OrdinalIgnoreCase)
     { "Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "DV2ControlHost" };
     private static readonly HashSet<string> SystemExecutables = new(StringComparer.OrdinalIgnoreCase)
@@ -40,7 +41,7 @@ public sealed class Win32WindowPlatform(Action<string> log) : IWindowPlatform, I
                 // Destruction removes window properties even if the HWND is later recycled.
                 if (id.InstanceToken == 0)
                 {
-                    if (!Native.SetProp(hwnd, generationProperty, (nint)Random.Shared.Next(1, int.MaxValue)))
+                    if (!Native.SetProp(hwnd, generationProperty, checked(++nextGeneration)))
                     { log("Skipped window: access denied while assigning identity."); return true; }
                     id = ReadIdentity(hwnd);
                     if (id is null || id.InstanceToken == 0) return true;

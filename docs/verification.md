@@ -4,8 +4,8 @@
 
 - Windows x64, .NET SDK 10.0.401.
 - Release solution build: zero warnings, zero errors, warnings treated as errors.
-- Dependency-free tests: 28 deterministic assertions covering filtering, explicit exceptions, sibling windows, duplicate hides, PID reuse, process-start reuse, same-process HWND generation reuse, stale selections, denied access, unconfirmed asynchronous requests, retry recovery, restore-all and JSON handling.
-- Interactive native tests: 7 additional assertions with two windows owned by a dedicated fixture. Hiding one leaves the other visible; a loopback TCP server responds while hidden; process stays alive; restore-all confirms visibility; destroying the fixture invalidates identity. Total: **35 assertions passed**.
+- Dependency-free tests: 29 deterministic assertions covering filtering, explicit exceptions, sibling windows, duplicate hides, PID reuse, process-start reuse, same-process HWND generation reuse, stale selections and recovery entries, denied access, unconfirmed asynchronous requests, retry recovery, restore-all and JSON handling.
+- Interactive native tests: 7 additional assertions with two windows owned by a dedicated fixture. Hiding one leaves the other visible; a loopback TCP server responds while hidden; process stays alive; restore-all confirms visibility; destroying the fixture invalidates identity. Total: **36 assertions passed**.
 - WPF UI Automation smoke: search, select fixture, hide, restore individually, hide again, then exit through Settings. Both fixture windows are confirmed visible after Nivetray exits. The test also opens the panel through the tray double-click event path.
 - Self-contained `win-x64` portable publish and ZIP generation succeeded; the published executable also passed the same WPF end-to-end smoke test. ZIP includes the full runtime and MIT license; no runtime installation is required.
 

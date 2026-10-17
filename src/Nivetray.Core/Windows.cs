@@ -56,6 +56,7 @@ public sealed class WindowManager(IWindowPlatform platform, Action<string> log)
 {
     private readonly Dictionary<nint, HiddenWindow> hidden = [];
     private readonly HashSet<nint> pending = [];
+    private nint nextToken;
     public IReadOnlyList<HiddenWindow> Hidden => hidden.Values.ToArray();
 
     public async Task<WindowResult> HideAsync(AppWindow window)
@@ -68,7 +69,7 @@ public sealed class WindowManager(IWindowPlatform platform, Action<string> log)
             if (hidden.ContainsKey(id.Handle)) return WindowResult.Fail("This window is already hidden.");
             if (!platform.Matches(id) || !platform.IsVisible(id))
                 return Failure("The selected window has closed or changed. Refresh the list.");
-            var token = (nint)Random.Shared.Next(1, int.MaxValue);
+            var token = checked(++nextToken);
             if (!platform.TryMark(id, token))
                 return Failure("Windows denied access to this window. Elevated or protected apps may be incompatible.");
             var entry = new HiddenWindow(window, token, platform.GetShowCommand(id));
