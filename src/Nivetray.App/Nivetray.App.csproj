@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>Nivetray</AssemblyName>
+    <ApplicationIcon>Assets/Nivetray.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../Nivetray.Windows/Nivetray.Windows.csproj" /></ItemGroup>
+  <ItemGroup><Resource Include="Assets/Nivetray.ico" /></ItemGroup>
+</Project>

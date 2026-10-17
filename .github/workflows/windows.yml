@@ -1,0 +1,60 @@
+name: Windows portable
+on:
+  push:
+    branches: [main, 'codex/**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        runtime: [win-x64, win-arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build
+        run: dotnet build Nivetray.sln -c Release
+      - name: Test safety and preferences
+        run: dotnet run --project tests/Nivetray.Tests -c Release --no-build
+      - name: Publish self-contained portable app
+        run: dotnet publish src/Nivetray.App -c Release -r ${{ matrix.runtime }} --self-contained true -o artifacts/portable/${{ matrix.runtime }}
+      - name: Package and checksum
+        shell: pwsh
+        run: |
+          Copy-Item LICENSE, README.md artifacts/portable/${{ matrix.runtime }}/
+          Compress-Archive -Path artifacts/portable/${{ matrix.runtime }}/* -DestinationPath artifacts/Nivetray-${{ matrix.runtime }}.zip
+          $zip = 'artifacts/Nivetray-${{ matrix.runtime }}.zip'
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  Nivetray-${{ matrix.runtime }}.zip" | Set-Content "$zip.sha256" -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Nivetray-${{ matrix.runtime }}
+          path: |
+            artifacts/*.zip
+            artifacts/*.sha256
+          if-no-files-found: error
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: portable
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Nivetray-*
+          path: release
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --generate-notes --title "Nivetray $GITHUB_REF_NAME"
