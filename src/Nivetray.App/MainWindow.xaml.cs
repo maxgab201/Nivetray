@@ -77,7 +77,8 @@ public partial class MainWindow : Window
                 source.Freeze();
             }
         }
-        catch (Exception ex) when (ex is ArgumentException or IOException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is ArgumentException or IOException or System.ComponentModel.Win32Exception or
+            UnauthorizedAccessException or System.Runtime.InteropServices.ExternalException)
         { Log("Application icon unavailable: " + ex.GetType().Name); }
         if (icons.Count >= 128) icons.Clear();
         icons[path] = source;
