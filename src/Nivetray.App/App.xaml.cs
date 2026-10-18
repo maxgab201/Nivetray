@@ -17,7 +17,10 @@ public partial class App : Application
             Shutdown();
             return;
         }
-        var window = new MainWindow();
+        string? directory = null;
+        if (e.Args.Length == 2 && e.Args[0] == "--data-directory")
+            directory = Path.GetFullPath(e.Args[1]);
+        var window = new MainWindow(directory);
         MainWindow = window;
         window.Show();
     }
