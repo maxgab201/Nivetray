@@ -41,6 +41,12 @@ public sealed class Win32WindowPlatform(Action<string> log) : IWindowPlatform, I
                 // Destruction removes window properties even if the HWND is later recycled.
                 if (id.InstanceToken == 0)
                 {
+                    if (observed.TryGetValue(hwnd, out var prior) && prior.ProcessId == id.ProcessId &&
+                        prior.ProcessStartedUtcTicks == id.ProcessStartedUtcTicks && prior.ThreadId == id.ThreadId && prior.ClassName == id.ClassName)
+                    {
+                        log("Window lifetime stamp missing; preserving unresolved identity.");
+                        return true;
+                    }
                     if (!Native.SetProp(hwnd, generationProperty, checked(++nextGeneration)))
                     { log("Skipped window: access denied while assigning identity."); return true; }
                     id = ReadIdentity(hwnd);
@@ -57,11 +63,25 @@ public sealed class Win32WindowPlatform(Action<string> log) : IWindowPlatform, I
             return true;
         }, 0);
         foreach (var id in observed.Values.ToArray())
-            if (!Matches(id)) observed.Remove(id.Handle);
+            if (Inspect(id) is IdentityState.Destroyed or IdentityState.Replaced) observed.Remove(id.Handle);
         return result;
     }
 
     public bool Matches(WindowIdentity identity) => ReadIdentity(identity.Handle) == identity;
+    public IdentityState Inspect(WindowIdentity identity)
+    {
+        var hwnd = identity.Handle;
+        if (!Native.IsWindow(hwnd)) return IdentityState.Destroyed;
+        var thread = Native.GetWindowThreadProcessId(hwnd, out var pid);
+        if (thread == 0 || pid == 0) return Native.IsWindow(hwnd) ? IdentityState.Unavailable : IdentityState.Destroyed;
+        if (pid != identity.ProcessId || thread != identity.ThreadId) return IdentityState.Replaced;
+        var actual = ReadIdentity(hwnd);
+        if (actual is null) return Native.IsWindow(hwnd) ? IdentityState.Unavailable : IdentityState.Destroyed;
+        if (actual.ProcessStartedUtcTicks != identity.ProcessStartedUtcTicks || actual.ClassName != identity.ClassName)
+            return IdentityState.Replaced;
+        if (actual.InstanceToken == 0) return IdentityState.Unavailable;
+        return actual.InstanceToken == identity.InstanceToken ? IdentityState.Original : IdentityState.Replaced;
+    }
     public bool TryMark(WindowIdentity identity, nint token)
     {
         if (!Matches(identity) || !Native.SetProp(identity.Handle, property, token)) return false;
@@ -88,11 +108,18 @@ public sealed class Win32WindowPlatform(Action<string> log) : IWindowPlatform, I
         if (!HasMark(identity, token)) return false;
         var command = !visible ? 0 : showCommand switch { 3 => 3, 2 or 6 or 7 => 7, _ => 4 };
         if (!Native.ShowWindowAsync(identity.Handle, command)) return false;
+        var confirmations = 0;
         for (var attempt = 0; attempt < 20; attempt++)
         {
             await Task.Delay(40);
             if (!HasMark(identity, token)) return false;
-            if (Native.IsWindowVisible(identity.Handle) == visible) return true;
+            confirmations = Native.IsWindowVisible(identity.Handle) == visible ? confirmations + 1 : 0;
+            if (confirmations >= 3)
+            {
+                // Keep recovery tracked when the owning UI thread does not respond.
+                var responsive = await Task.Run(() => Native.SendMessageTimeout(identity.Handle, 0, 0, 0, 3, 200, out _) != 0);
+                return responsive && HasMark(identity, token) && Native.IsWindowVisible(identity.Handle) == visible;
+            }
         }
         return false;
     }

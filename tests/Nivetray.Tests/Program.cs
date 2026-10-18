@@ -97,6 +97,7 @@ internal static class Program
         manager = new(fake, _ => { });
         await manager.HideAsync(w); await manager.HideAsync(Window(102));
         Check(await manager.RestoreAllAsync() && manager.Hidden.Count == 0, "shutdown restores all windows");
+        await RecoveryRegressions(w);
 
         var directory = Path.Combine(Path.GetTempPath(), "Nivetray.Tests." + Guid.NewGuid().ToString("N"));
         try
@@ -112,6 +113,69 @@ internal static class Program
             Check(store.Load().Rules.Count == 0, "null rules handled safely");
         }
         finally { Directory.Delete(directory, true); }
+    }
+
+    private static async Task RecoveryRegressions(AppWindow w)
+    {
+        var fake = new FakePlatform(w);
+        var manager = new WindowManager(fake, _ => { });
+        await manager.HideAsync(w);
+        fake.DropMark(w.Identity.Handle);
+        manager.Prune();
+        Check(manager.Hidden.Count == 1 && manager.Hidden[0].State == RecoveryState.NeedsAttention,
+            "lost authorization never prunes a live hidden window");
+        Check(await manager.RestoreAllAsync() && fake.IsVisible(w.Identity),
+            "verified original lifetime can reacquire authorization and recover");
+
+        fake = new(w); manager = new(fake, _ => { });
+        await manager.HideAsync(w); fake.DropMark(w.Identity.Handle); fake.DenyMark = true;
+        Check(!await manager.RestoreAllAsync() && manager.Hidden.Count == 1,
+            "denied reauthorization retains recovery and blocks unsafe exit");
+        Check(manager.Hidden[0].Error is not null, "recovery failure explains a practical retry action");
+        fake.DenyMark = false;
+        Check(await manager.RestoreAllAsync(), "permission recovery retries successfully");
+
+        fake = new(w); manager = new(fake, _ => { });
+        await manager.HideAsync(w); fake.IdentityOverride = IdentityState.Unavailable;
+        var requests = fake.Commands.Count;
+        manager.Prune();
+        Check(!await manager.RestoreAllAsync() && manager.Hidden.Count == 1 && fake.Commands.Count == requests,
+            "unknown identity neither changes a window nor drops recovery");
+        fake.IdentityOverride = IdentityState.Original;
+        Check(await manager.RestoreAllAsync(), "temporarily inaccessible identity can be retried");
+
+        foreach (var state in new[] { IdentityState.Destroyed, IdentityState.Replaced })
+        {
+            fake = new(w); manager = new(fake, _ => { });
+            await manager.HideAsync(w); fake.IdentityOverride = state; requests = fake.Commands.Count;
+            manager.Prune();
+            Check(await manager.RestoreAllAsync() && fake.Commands.Count == requests && manager.Hidden.Count == 0,
+                "confirmed " + state + " removes only the obsolete record");
+        }
+
+        fake = new(w) { OperationGate = new(TaskCreationOptions.RunContinuationsAsynchronously) };
+        manager = new(fake, _ => { });
+        var hide = manager.HideAsync(w);
+        var restore = manager.RestoreAllAsync();
+        manager.Prune();
+        Check(!hide.IsCompleted && !restore.IsCompleted && manager.Hidden.Count == 1,
+            "exit recovery queues behind an asynchronous hide and prune cannot discard it");
+        fake.OperationGate.SetResult();
+        Check((await hide).Success && await restore && manager.Hidden.Count == 0 && fake.IsVisible(w.Identity),
+            "queued restore executes after pending hide");
+
+        fake = new(w); manager = new(fake, _ => { });
+        await manager.HideAsync(w); fake.ThrowOnRestore = true;
+        Check(!await manager.RestoreAllAsync() && manager.Hidden.Count == 1,
+            "native exception retains the recovery entry");
+        fake.ThrowOnRestore = false;
+        Check(await manager.RestoreAllAsync(), "native failure can be retried");
+        for (var cycle = 0; cycle < 10; cycle++)
+        {
+            await manager.HideAsync(w);
+            Check(await manager.RestoreAllAsync() && manager.Hidden.Count == 0,
+                "repeat hide/restore cycle " + cycle);
+        }
     }
 
     private static async Task RunNativeTest()
@@ -186,6 +250,7 @@ internal static class Program
         timer.Tick += (_, _) => Forms.Application.Exit();
         timer.Start();
         first.Shown += (_, _) => second.Show();
+        second.FormClosed += (_, _) => first.Close();
         Forms.Application.Run(first);
     }
 
@@ -194,23 +259,31 @@ internal static class Program
         private readonly Dictionary<nint, AppWindow> current = windows.ToDictionary(w => w.Identity.Handle);
         private readonly Dictionary<nint, nint> marks = [];
         public List<int> Commands { get; } = [];
-        public bool DenyMark { get; init; }
+        public bool DenyMark { get; set; }
+        public IdentityState? IdentityOverride { get; set; }
+        public TaskCompletionSource? OperationGate { get; set; }
+        public bool ThrowOnRestore { get; set; }
         public bool FailOperation { get; set; }
         public IReadOnlyList<AppWindow> Enumerate() => current.Values.ToArray();
         public void Replace(AppWindow w) { current[w.Identity.Handle] = w; marks.Remove(w.Identity.Handle); }
         public bool Matches(WindowIdentity id) => current.TryGetValue(id.Handle, out var w) && w.Identity == id;
+        public IdentityState Inspect(WindowIdentity id) => IdentityOverride ??
+            (!current.ContainsKey(id.Handle) ? IdentityState.Destroyed : Matches(id) ? IdentityState.Original : IdentityState.Replaced);
+        public void DropMark(nint hwnd) => marks.Remove(hwnd);
         public bool TryMark(WindowIdentity id, nint token) { if (DenyMark || !Matches(id)) return false; marks[id.Handle] = token; return true; }
         public bool HasMark(WindowIdentity id, nint token) => Matches(id) && marks.GetValueOrDefault(id.Handle) == token;
         public void RemoveMark(WindowIdentity id, nint token) { if (HasMark(id, token)) marks.Remove(id.Handle); }
         public int GetShowCommand(WindowIdentity id) => 3;
         public bool IsVisible(WindowIdentity id) => Matches(id) && current[id.Handle].IsVisible;
-        public Task<bool> SetVisibleAsync(WindowIdentity id, nint token, bool visible, int showCommand)
+        public async Task<bool> SetVisibleAsync(WindowIdentity id, nint token, bool visible, int showCommand)
         {
-            if (!HasMark(id, token)) return Task.FromResult(false);
+            if (OperationGate is not null) await OperationGate.Task;
+            if (visible && ThrowOnRestore) throw new InvalidOperationException("Simulated native failure");
+            if (!HasMark(id, token)) return false;
             Commands.Add(visible ? showCommand : 0);
-            if (FailOperation) return Task.FromResult(false);
+            if (FailOperation) return false;
             current[id.Handle] = current[id.Handle] with { IsVisible = visible };
-            return Task.FromResult(true);
+            return true;
         }
     }
 }
