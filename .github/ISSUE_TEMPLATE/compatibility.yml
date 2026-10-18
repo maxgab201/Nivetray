@@ -1,0 +1,22 @@
+name: Window compatibility or recovery
+description: Report a window that cannot be detected, hidden or restored
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Windows version, CPU architecture, Nivetray version and app/terminal host. Do not include personal executable paths.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps and observed result
+      description: Use sanitized titles. Is the target elevated? Is the window hidden, visible or unresponsive? Keep Nivetray running if recovery needs attention.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Optional sanitized diagnostics
+      description: Review copied text before posting. Do not include credentials or personal screenshots.

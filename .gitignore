@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+.vs/
+artifacts/
+*.user
+*.suo
+TestResults/
+settings.json
+settings.json.tmp
+settings.json.recovered-*.bak
+diagnostics.log*
