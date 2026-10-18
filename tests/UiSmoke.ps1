@@ -107,6 +107,20 @@ function Select-Theme([string]$name) {
     $combo.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse()
     Start-Sleep -Milliseconds 300
 }
+function Assert-ControlInWindow([string]$name) {
+    for ($attempt = 0; $attempt -lt 15; $attempt++) {
+        $control = Find-Control $name
+        if ($null -ne $control) {
+            $bounds = $root.Current.BoundingRectangle
+            $rect = $control.Current.BoundingRectangle
+            if (-not $control.Current.IsOffscreen -and $rect.Width -gt 0 -and
+                $rect.Left -ge $bounds.Left -and $rect.Top -ge $bounds.Top -and
+                $rect.Right -le $bounds.Right + 1 -and $rect.Bottom -le $bounds.Bottom + 1) { return }
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    throw "Control is clipped after resize/DPI change: $name"
+}
 try {
     for ($attempt = 0; $attempt -lt 40; $attempt++) {
         $app.Refresh()
@@ -304,6 +318,8 @@ try {
             $dpi = [UiSmokeNative]::GetDpiForWindow($script:appHandle)
             Write-Output ("Monitor {0}: actual owned-window DPI {1}; awareness {2}." -f $monitorIndex, $dpi, [UiSmokeNative]::GetAwarenessFromDpiAwarenessContext([UiSmokeNative]::GetWindowDpiAwarenessContext($script:appHandle)))
             if ($root.Current.IsOffscreen) { throw 'Owned window became inaccessible after monitor move.' }
+            Assert-ControlInWindow 'Restore all'
+            Assert-ControlInWindow 'Send Nivetray to tray'
             Capture ('monitor-' + $monitorIndex)
             $monitorIndex++
         }

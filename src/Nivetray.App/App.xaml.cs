@@ -11,7 +11,6 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         System.Windows.Forms.Application.SetHighDpiMode(System.Windows.Forms.HighDpiMode.PerMonitorV2);
-        Nivetray.Windows.WindowAppearance.ConfigureUiThreadDpi();
         base.OnStartup(e);
         // Static utility UI: measured lower private memory than persistent GPU-backed surfaces.
         System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;

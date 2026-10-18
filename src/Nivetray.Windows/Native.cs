@@ -11,7 +11,7 @@ internal static class Native
     internal delegate bool EnumProc(nint hwnd, nint state);
     [DllImport("user32.dll")] internal static extern bool EnumWindows(EnumProc callback, nint state);
     [DllImport("user32.dll")] internal static extern bool IsWindow(nint hwnd);
-    [DllImport("user32.dll")] internal static extern nint SetThreadDpiAwarenessContext(nint context);
+    [DllImport("user32.dll")] internal static extern bool SetProcessDpiAwarenessContext(nint context);
     [DllImport("user32.dll")] internal static extern bool IsWindowVisible(nint hwnd);
     [DllImport("user32.dll")] internal static extern uint GetWindowThreadProcessId(nint hwnd, out uint pid);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern int GetWindowText(nint hwnd, StringBuilder text, int max);

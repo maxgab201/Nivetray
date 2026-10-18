@@ -2,10 +2,10 @@ namespace Nivetray.Windows;
 
 public static class WindowAppearance
 {
-    public static void ConfigureUiThreadDpi()
+    public static void ConfigureProcessDpi()
     {
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 14393)) return;
-        if (Native.SetThreadDpiAwarenessContext(-4) == 0) Native.SetThreadDpiAwarenessContext(-3);
+        if (!Native.SetProcessDpiAwarenessContext(-4)) Native.SetProcessDpiAwarenessContext(-3);
     }
     public static void SetDarkCaption(nint handle, bool dark)
     {
