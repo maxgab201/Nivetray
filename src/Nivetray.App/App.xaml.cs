@@ -6,14 +6,23 @@ namespace Nivetray.App;
 public partial class App : Application
 {
     private Mutex? instance;
+    private EventWaitHandle? openRequest;
+    private RegisteredWaitHandle? openWait;
     protected override void OnStartup(StartupEventArgs e)
     {
+        System.Windows.Forms.Application.SetHighDpiMode(System.Windows.Forms.HighDpiMode.PerMonitorV2);
+        Nivetray.Windows.WindowAppearance.ConfigureUiThreadDpi();
         base.OnStartup(e);
-        var user = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName;
+        // Static utility UI: measured lower private memory than persistent GPU-backed surfaces.
+        System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        var user = identity.User?.Value ?? Environment.UserName;
         instance = new Mutex(true, @"Local\Nivetray." + user, out var first);
         if (!first)
         {
-            MessageBox.Show("Nivetray is already running. Open it from the system tray.", "Nivetray");
+            try { using var request = EventWaitHandle.OpenExisting(@"Local\Nivetray.Open." + user); request.Set(); }
+            catch (WaitHandleCannotBeOpenedException)
+            { MessageBox.Show("Nivetray is starting. Open it from the system tray in a moment.", "Nivetray"); }
             Shutdown();
             return;
         }
@@ -22,11 +31,16 @@ public partial class App : Application
             directory = Path.GetFullPath(e.Args[1]);
         var window = new MainWindow(directory);
         MainWindow = window;
+        openRequest = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\Nivetray.Open." + user);
+        openWait = ThreadPool.RegisterWaitForSingleObject(openRequest, (_, _) => Dispatcher.BeginInvoke(() =>
+        { window.Show(); window.WindowState = WindowState.Normal; window.Activate(); }), null, Timeout.Infinite, false);
         window.Show();
     }
     protected override void OnExit(ExitEventArgs e)
     {
         instance?.Dispose();
+        openWait?.Unregister(null);
+        openRequest?.Dispose();
         base.OnExit(e);
     }
 }

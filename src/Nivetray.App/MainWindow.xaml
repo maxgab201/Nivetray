@@ -1,35 +1,197 @@
 <Window x:Class="Nivetray.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Style="{StaticResource {x:Type Window}}" Title="Nivetray" Width="1120" Height="780" MinWidth="820" MinHeight="600" WindowStartupLocation="CenterScreen" Closing="OnClosing" Icon="Assets/Nivetray.ico" PreviewKeyDown="WindowKeyDown">
- <Window.Resources>
-  <DataTemplate x:Key="WindowRow"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="42"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Image Source="{Binding Icon}" Width="28" Height="28" VerticalAlignment="Top" Margin="0,4,0,0"/><StackPanel Grid.Column="1" Margin="0,0,12,0" ToolTip="{Binding Window.ExecutablePath}"><TextBlock Text="{Binding AppName}" FontWeight="SemiBold"/><TextBlock Text="{Binding Window.Title}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Window.Title}"/><TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource Muted}" FontSize="12"/><TextBlock Text="{Binding Error}" Foreground="{DynamicResource Error}" FontSize="12"/></StackPanel><Button Grid.Column="2" Content="{Binding Action}" Tag="{Binding}" Click="RowAction" AutomationProperties.Name="{Binding ActionName}" ToolTip="{Binding ActionName}" VerticalAlignment="Center"/></Grid></DataTemplate>
-  <Style x:Key="Card" TargetType="Border"><Setter Property="Background" Value="{DynamicResource Surface}"/><Setter Property="BorderBrush" Value="{DynamicResource Line}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="10"/><Setter Property="Padding" Value="18"/><Setter Property="Margin" Value="0,0,0,14"/></Style>
- </Window.Resources>
- <Grid Margin="24"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-  <DockPanel Margin="0,0,0,24"><Border DockPanel.Dock="Left" Background="{DynamicResource Accent}" CornerRadius="12" Width="44" Height="44" Margin="0,0,12,0"><TextBlock Text="N" Foreground="{DynamicResource AccentText}" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><Button DockPanel.Dock="Right" Content="Send Nivetray to tray" Click="SendToTray" ToolTip="Hide this panel; keep Nivetray in the notification area"/><Border DockPanel.Dock="Right" CornerRadius="7" Background="{DynamicResource AccentSoft}" Padding="12,8" VerticalAlignment="Center" Margin="12,0"><TextBlock x:Name="HiddenBadge" FontWeight="SemiBold" Text="0 hidden"/></Border><StackPanel><TextBlock Text="Nivetray" FontSize="23" FontWeight="SemiBold"/><TextBlock Text="Keep it running. Keep it hidden." Style="{StaticResource MutedText}" FontSize="12"/></StackPanel></DockPanel>
-  <TabControl x:Name="Tabs" Grid.Row="1" TabStripPlacement="Left" SelectionChanged="NavigationChanged">
-   <TabItem Header="Available windows" AutomationProperties.Name="Available windows"><Grid Margin="4,0,0,0"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-    <StackPanel Margin="0,0,0,18"><TextBlock Text="Make space. Keep working." Style="{StaticResource Heading}"/><TextBlock Text="Hide a window here. Bring it back from the tray whenever you need it." Style="{StaticResource MutedText}"/></StackPanel>
-    <DockPanel Grid.Row="1" Margin="0,0,0,14"><Button DockPanel.Dock="Right" Content="Refresh" Click="RefreshClicked" ToolTip="Refresh windows (F5)"/><TextBox x:Name="Search" Tag="Search windows…" AutomationProperties.Name="Search windows" ToolTip="Search title, app or path (Ctrl+F)" TextChanged="SearchChanged" VerticalContentAlignment="Center"/></DockPanel>
-    <Border Grid.Row="2" Style="{StaticResource Card}" Padding="6" Margin="0"><Grid><ListView x:Name="AvailableList" AutomationProperties.Name="Available window list" ItemTemplate="{StaticResource WindowRow}" SelectionMode="Single"/><StackPanel x:Name="AvailableEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="370" Margin="24"><TextBlock Text="Your workspace is clear" FontSize="19" FontWeight="SemiBold" TextAlignment="Center"/><TextBlock x:Name="AvailableEmptyText" Text="Open an app, then choose Refresh. Only compatible windows appear here." TextAlignment="Center" Foreground="{DynamicResource Muted}" Margin="0,8,0,0"/></StackPanel></Grid></Border>
-    <DockPanel Grid.Row="3" Margin="0,12,0,0"><Button x:Name="HideButton" DockPanel.Dock="Right" Content="Hide selected window" Click="HideSelected" Style="{StaticResource Primary}"/><Button DockPanel.Dock="Right" Content="Favorite selected app" Click="RememberSelected" ToolTip="Keep this app near the top. Nothing is hidden automatically."/><TextBlock x:Name="AvailableCount" Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/></DockPanel>
-   </Grid></TabItem>
-   <TabItem Header="Hidden windows" AutomationProperties.Name="Hidden windows"><Grid Margin="4,0,0,0"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-    <StackPanel Margin="0,0,0,18"><TextBlock Text="Out of sight. Still running." Style="{StaticResource Heading}"/><TextBlock Text="Restore a window here or from the tray. A terminal's tabs return together." Style="{StaticResource MutedText}"/></StackPanel>
-    <TextBox x:Name="HiddenSearch" Tag="Search hidden windows…" Grid.Row="1" AutomationProperties.Name="Search hidden windows" ToolTip="Search hidden windows (Ctrl+F)" TextChanged="SearchChanged" Margin="0,0,0,14"/>
-    <Border Grid.Row="2" Style="{StaticResource Card}" Padding="6" Margin="0"><Grid><ListView x:Name="HiddenList" AutomationProperties.Name="Hidden window list" ItemTemplate="{StaticResource WindowRow}"/><StackPanel x:Name="HiddenEmpty" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="370" Margin="24"><TextBlock Text="Everything is in view" FontSize="19" FontWeight="SemiBold" TextAlignment="Center"/><TextBlock x:Name="HiddenEmptyText" Text="Windows you hide appear here. You can find them in the tray, too." Foreground="{DynamicResource Muted}" TextAlignment="Center" Margin="0,8,0,0"/></StackPanel></Grid></Border>
-    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0"><Button Content="Restore selected" Click="RestoreSelected"/><Button Content="Restore all" Click="RestoreAll" Style="{StaticResource Primary}"/></StackPanel>
-   </Grid></TabItem>
-   <TabItem Header="Applications" AutomationProperties.Name="Applications"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="4,0,0,0"><TextBlock Text="Your apps, your rules." Style="{StaticResource Heading}"/><TextBlock Text="Favorites stay near the top. Exclusions stay out of the list. Rules never hide windows automatically." Foreground="{DynamicResource Muted}" Margin="0,0,0,18"/>
-    <TextBox x:Name="RulesSearch" Tag="Search application rules…" AutomationProperties.Name="Search application rules" TextChanged="SearchChanged" ToolTip="Search by app name or path" Margin="0,0,0,14"/><ListView x:Name="RulesList" Height="190" AutomationProperties.Name="Application rules"><ListView.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Label}" Foreground="{DynamicResource Muted}"/><TextBlock Text="{Binding Rule.ExecutablePath}" Foreground="{DynamicResource Muted}" FontSize="11"/></StackPanel></DataTemplate></ListView.ItemTemplate></ListView><TextBlock x:Name="RulesEmpty" Text="No rules yet. Favorite an app from Available windows, or add an executable below." Foreground="{DynamicResource Muted}" Margin="0,8"/>
-    <TextBlock Text="Executable path" FontWeight="SemiBold" Margin="0,18,0,6"/><DockPanel><Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseExecutable"/><TextBox x:Name="RulePath" AutomationProperties.Name="Executable path"/></DockPanel><TextBlock Text="Rule" FontWeight="SemiBold" Margin="0,14,0,6"/><ComboBox x:Name="RuleModeBox" DisplayMemberPath="Label" AutomationProperties.Name="Application rule mode"/><TextBlock Text="Include helper windows allows visible, titled helper windows. System surfaces and uncertain identities always stay protected." Foreground="{DynamicResource Muted}" FontSize="12" Margin="0,8,0,12"/><WrapPanel><Button Content="Save rule" Click="SaveRule" Style="{StaticResource Primary}"/><Button Content="Remove selected rule" Click="RemoveRule"/></WrapPanel>
-   </StackPanel></ScrollViewer></TabItem>
-   <TabItem Header="Settings" AutomationProperties.Name="Settings"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="4,0,0,0"><TextBlock Text="Make Nivetray feel at home." Style="{StaticResource Heading}"/><TextBlock Text="Simple preferences. Stored on this computer." Foreground="{DynamicResource Muted}" Margin="0,0,0,18"/>
-    <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Appearance" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="Theme" Margin="0,12,0,6"/><ComboBox x:Name="ThemeBox" AutomationProperties.Name="Theme" SelectionChanged="ThemeChanged"/><TextBlock Text="High contrast always follows Windows." Foreground="{DynamicResource Muted}" FontSize="12" Margin="0,8,0,0"/></StackPanel></Border>
-    <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Window and tray behavior" FontSize="17" FontWeight="SemiBold"/><CheckBox x:Name="CloseToTray" Content="Closing this panel keeps Nivetray in the tray" Checked="ClosePreferenceChanged" Unchecked="ClosePreferenceChanged"/><CheckBox x:Name="Notifications" Content="Show a tip when I send Nivetray to the tray" Checked="OtherPreferenceChanged" Unchecked="OtherPreferenceChanged"/><CheckBox x:Name="Auxiliary" Content="Show compatible helper windows (advanced)" Checked="OtherPreferenceChanged" Unchecked="OtherPreferenceChanged"/><TextBlock Text="Minimize uses the taskbar. Send to tray hides only this panel. Exit restores managed windows first." Foreground="{DynamicResource Muted}" FontSize="12"/></StackPanel></Border>
-    <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Local by design" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="No telemetry, accounts or network connections. Diagnostics omit titles and paths." Foreground="{DynamicResource Muted}" Margin="0,8,0,0"/><TextBlock x:Name="SettingsLocation" Foreground="{DynamicResource Muted}" FontSize="11" Margin="0,8"/><WrapPanel><Button Content="Open data folder" Click="OpenDataFolder"/><Button Content="Copy recovery details" Click="CopyRecoveryDetails"/></WrapPanel><TextBlock Text="Nivetray 0.2.0 · MIT License · Windows 10/11 target platforms" Foreground="{DynamicResource Muted}" FontSize="12" Margin="0,12,0,0"/><TextBlock Text="Recovery needs attention? Keep Nivetray running, retry Restore, or use the app's own Show command. Forced exit, crashes and Windows shutdown cannot guarantee recovery." Foreground="{DynamicResource Muted}" FontSize="12" Margin="0,8,0,0"/><Button Content="Restore all and exit Nivetray" Click="ExitClicked" HorizontalAlignment="Left" Margin="0,16,0,0"/></StackPanel></Border>
-   </StackPanel></ScrollViewer></TabItem>
-  </TabControl>
-  <Grid Grid.Row="2" Margin="0,18,0,0"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><ProgressBar x:Name="Progress" Height="3" IsIndeterminate="True" Visibility="Collapsed" Margin="0,0,0,8" Foreground="{DynamicResource Accent}"/><TextBlock x:Name="Status" Grid.Row="1" Text="Ready. Hide a window to clear your taskbar without stopping its app." Foreground="{DynamicResource Muted}" AutomationProperties.LiveSetting="Polite"/></Grid>
- </Grid>
+  <Window.Resources>
+    <Style x:Key="AccessibleWindow" TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+      <Setter Property="AutomationProperties.Name" Value="{Binding Window.Title}" />
+      <Setter Property="AutomationProperties.ItemStatus" Value="{Binding Subtitle}" />
+      <Setter Property="ToolTip" Value="{Binding Window.ExecutablePath}" />
+    </Style>
+    <DataTemplate x:Key="WindowRow">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="42" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <Image Source="{Binding Icon}" Width="28" Height="28" VerticalAlignment="Top" Margin="0,4,0,0" />
+        <StackPanel Grid.Column="1" Margin="0,0,12,0" ToolTip="{Binding Window.ExecutablePath}">
+          <TextBlock Text="{Binding AppName}" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding Window.Title}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Window.Title}" />
+          <TextBlock Text="{Binding Subtitle}" Foreground="{DynamicResource Muted}" FontSize="12" />
+          <TextBlock Text="{Binding Error}" Foreground="{DynamicResource Error}" FontSize="12" />
+        </StackPanel>
+        <Button Grid.Column="2" Content="{Binding Action}" Tag="{Binding}" Click="RowAction" AutomationProperties.Name="{Binding ActionName}" ToolTip="{Binding ActionName}" VerticalAlignment="Center" />
+      </Grid>
+    </DataTemplate>
+    <Style x:Key="Card" TargetType="Border">
+      <Setter Property="Background" Value="{DynamicResource Surface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="18" />
+      <Setter Property="Margin" Value="0,0,0,14" />
+    </Style>
+  </Window.Resources>
+  <Grid Margin="24">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+    <DockPanel Margin="0,0,0,24">
+      <Border DockPanel.Dock="Left" Background="{DynamicResource Accent}" CornerRadius="12" Width="44" Height="44" Margin="0,0,12,0">
+        <TextBlock Text="N" Foreground="{DynamicResource AccentText}" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </Border>
+      <Button DockPanel.Dock="Right" Content="Send Nivetray to tray" Click="SendToTray" ToolTip="Hide this panel; keep Nivetray in the notification area" />
+      <Border DockPanel.Dock="Right" CornerRadius="7" Background="{DynamicResource AccentSoft}" Padding="12,8" VerticalAlignment="Center" Margin="12,0">
+        <TextBlock x:Name="HiddenBadge" FontWeight="SemiBold" Text="0 hidden" />
+      </Border>
+      <StackPanel>
+        <TextBlock Text="Nivetray" FontSize="23" FontWeight="SemiBold" />
+        <TextBlock Text="Keep it running. Keep it hidden." Style="{StaticResource MutedText}" FontSize="12" />
+      </StackPanel>
+    </DockPanel>
+    <TabControl x:Name="Tabs" Grid.Row="1" TabStripPlacement="Left" SelectionChanged="NavigationChanged">
+      <TabItem Header="Available windows" AutomationProperties.Name="Available windows">
+        <Grid Margin="4,0,0,0">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+          <StackPanel Margin="0,0,0,18">
+            <TextBlock Text="Make space. Keep working." Style="{StaticResource Heading}" />
+            <TextBlock Text="Hide a window here. Bring it back from the tray whenever you need it." Style="{StaticResource MutedText}" />
+          </StackPanel>
+          <DockPanel Grid.Row="1" Margin="0,0,0,14">
+            <Button DockPanel.Dock="Right" Content="Refresh" Click="RefreshClicked" ToolTip="Refresh windows (F5)" />
+            <TextBox x:Name="Search" Tag="Search windows…" AutomationProperties.Name="Search windows" ToolTip="Search title, app or path (Ctrl+F)" TextChanged="SearchChanged" VerticalContentAlignment="Center" />
+          </DockPanel>
+          <Border Grid.Row="2" Style="{StaticResource Card}" Padding="6" Margin="0">
+            <Grid>
+              <ListView x:Name="AvailableList" AutomationProperties.Name="Available window list" ItemTemplate="{StaticResource WindowRow}" ItemContainerStyle="{StaticResource AccessibleWindow}" SelectionMode="Single" />
+              <StackPanel x:Name="AvailableEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="370" Margin="24">
+                <TextBlock Text="Your workspace is clear" FontSize="19" FontWeight="SemiBold" TextAlignment="Center" />
+                <TextBlock x:Name="AvailableEmptyText" Text="Open an app, then choose Refresh. Only compatible windows appear here." TextAlignment="Center" Foreground="{DynamicResource Muted}" Margin="0,8,0,0" />
+              </StackPanel>
+            </Grid>
+          </Border>
+          <DockPanel Grid.Row="3" Margin="0,12,0,0">
+            <Button x:Name="HideButton" DockPanel.Dock="Right" Content="Hide selected window" Click="HideSelected" Style="{StaticResource Primary}" />
+            <Button DockPanel.Dock="Right" Content="Favorite selected app" Click="RememberSelected" ToolTip="Keep this app near the top. Nothing is hidden automatically." />
+            <TextBlock x:Name="AvailableCount" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+          </DockPanel>
+        </Grid>
+      </TabItem>
+      <TabItem Header="Hidden windows" AutomationProperties.Name="Hidden windows">
+        <Grid Margin="4,0,0,0">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+          <StackPanel Margin="0,0,0,18">
+            <TextBlock Text="Out of sight. Still running." Style="{StaticResource Heading}" />
+            <TextBlock Text="Restore a window here or from the tray. A terminal's tabs return together." Style="{StaticResource MutedText}" />
+          </StackPanel>
+          <TextBox x:Name="HiddenSearch" Tag="Search hidden windows…" Grid.Row="1" AutomationProperties.Name="Search hidden windows" ToolTip="Search hidden windows (Ctrl+F)" TextChanged="SearchChanged" Margin="0,0,0,14" />
+          <Border Grid.Row="2" Style="{StaticResource Card}" Padding="6" Margin="0">
+            <Grid>
+              <ListView x:Name="HiddenList" AutomationProperties.Name="Hidden window list" ItemTemplate="{StaticResource WindowRow}" ItemContainerStyle="{StaticResource AccessibleWindow}" />
+              <StackPanel x:Name="HiddenEmpty" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="370" Margin="24">
+                <TextBlock Text="Everything is in view" FontSize="19" FontWeight="SemiBold" TextAlignment="Center" />
+                <TextBlock x:Name="HiddenEmptyText" Text="Windows you hide appear here. You can find them in the tray, too." Foreground="{DynamicResource Muted}" TextAlignment="Center" Margin="0,8,0,0" />
+              </StackPanel>
+            </Grid>
+          </Border>
+          <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Restore selected" Click="RestoreSelected" />
+            <Button Content="Restore all" Click="RestoreAll" Style="{StaticResource Primary}" />
+          </StackPanel>
+        </Grid>
+      </TabItem>
+      <TabItem Header="Applications" AutomationProperties.Name="Applications">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="4,0,0,0">
+            <TextBlock Text="Your apps, your rules." Style="{StaticResource Heading}" />
+            <TextBlock Text="Favorites stay near the top. Exclusions stay out of the list. Rules never hide windows automatically." Foreground="{DynamicResource Muted}" Margin="0,0,0,18" />
+            <TextBox x:Name="RulesSearch" Tag="Search application rules…" AutomationProperties.Name="Search application rules" TextChanged="SearchChanged" ToolTip="Search by app name or path" Margin="0,0,0,14" />
+            <ListView x:Name="RulesList" SelectionChanged="RuleSelectionChanged" Height="190" AutomationProperties.Name="Application rules">
+              <ListView.ItemTemplate>
+                <DataTemplate>
+                  <StackPanel>
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Muted}" />
+                    <TextBlock Text="{Binding Rule.ExecutablePath}" Foreground="{DynamicResource Muted}" FontSize="11" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListView.ItemTemplate>
+            </ListView>
+            <TextBlock x:Name="RulesEmpty" Text="No rules yet. Favorite an app from Available windows, or add an executable below." Foreground="{DynamicResource Muted}" Margin="0,8" />
+            <TextBlock Text="Executable path" FontWeight="SemiBold" Margin="0,18,0,6" />
+            <DockPanel>
+              <Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseExecutable" />
+              <TextBox x:Name="RulePath" AutomationProperties.Name="Executable path" />
+            </DockPanel>
+            <CheckBox x:Name="FavoriteRule" Content="Favorite this application" AutomationProperties.Name="Favorite this application" /><TextBlock Text="Window visibility" FontWeight="SemiBold" Margin="0,14,0,6" />
+            <ComboBox x:Name="RuleModeBox" DisplayMemberPath="Label" AutomationProperties.Name="Application rule mode" />
+            <TextBlock Text="Include helper windows allows visible, titled helper windows. System surfaces and uncertain identities always stay protected." Foreground="{DynamicResource Muted}" FontSize="12" Margin="0,8,0,12" />
+            <WrapPanel>
+              <Button Content="Save rule" Click="SaveRule" Style="{StaticResource Primary}" />
+              <Button Content="Remove selected rule" Click="RemoveRule" />
+            </WrapPanel>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+      <TabItem Header="Settings" AutomationProperties.Name="Settings">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="4,0,0,0">
+            <TextBlock Text="Make Nivetray feel at home." Style="{StaticResource Heading}" />
+            <TextBlock Text="Simple preferences. Stored on this computer." Foreground="{DynamicResource Muted}" Margin="0,0,0,18" />
+            <Border Style="{StaticResource Card}">
+              <StackPanel>
+                <TextBlock Text="Appearance" FontSize="17" FontWeight="SemiBold" />
+                <TextBlock Text="Theme" Margin="0,12,0,6" />
+                <ComboBox x:Name="ThemeBox" AutomationProperties.Name="Theme" SelectionChanged="ThemeChanged" />
+                <TextBlock Text="High contrast always follows Windows." Foreground="{DynamicResource Muted}" FontSize="12" Margin="0,8,0,0" />
+              </StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card}">
+              <StackPanel>
+                <TextBlock Text="Window and tray behavior" FontSize="17" FontWeight="SemiBold" />
+                <CheckBox x:Name="CloseToTray" Content="Closing this panel keeps Nivetray in the tray" Checked="ClosePreferenceChanged" Unchecked="ClosePreferenceChanged" />
+                <CheckBox x:Name="Notifications" Content="Show a tip when I send Nivetray to the tray" Checked="OtherPreferenceChanged" Unchecked="OtherPreferenceChanged" />
+                <CheckBox x:Name="Auxiliary" Content="Show compatible helper windows (advanced)" Checked="OtherPreferenceChanged" Unchecked="OtherPreferenceChanged" />
+                <TextBlock Text="Minimize uses the taskbar. Send to tray hides only this panel. Exit restores managed windows first." Foreground="{DynamicResource Muted}" FontSize="12" />
+              </StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card}">
+              <StackPanel>
+                <TextBlock Text="Local by design" FontSize="17" FontWeight="SemiBold" />
+                <TextBlock Text="No telemetry, accounts or network connections. Diagnostics omit titles and paths." Foreground="{DynamicResource Muted}" Margin="0,8,0,0" />
+                <TextBlock x:Name="SettingsLocation" Foreground="{DynamicResource Muted}" FontSize="11" Margin="0,8" />
+                <WrapPanel>
+                  <Button Content="Open data folder" Click="OpenDataFolder" />
+                  <Button Content="Copy recovery details" Click="CopyRecoveryDetails" />
+                </WrapPanel>
+                <TextBlock x:Name="AboutVersion" Foreground="{DynamicResource Muted}" FontSize="12" Margin="0,12,0,0" />
+                <TextBlock Text="Recovery needs attention? Keep Nivetray running, retry Restore, or use the app's own Show command. Forced exit, crashes and Windows shutdown cannot guarantee recovery." Foreground="{DynamicResource Muted}" FontSize="12" Margin="0,8,0,0" />
+                <Button Content="Restore all and exit Nivetray" Click="ExitClicked" HorizontalAlignment="Left" Margin="0,16,0,0" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+    </TabControl>
+    <Grid Grid.Row="2" Margin="0,18,0,0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+      </Grid.RowDefinitions>
+      <ProgressBar x:Name="Progress" Height="3" IsIndeterminate="True" Visibility="Collapsed" Margin="0,0,0,8" Foreground="{DynamicResource Accent}" />
+      <TextBlock x:Name="Status" Grid.Row="1" Text="Ready. Hide a window to clear your taskbar without stopping its app." Foreground="{DynamicResource Muted}" AutomationProperties.LiveSetting="Polite" />
+    </Grid>
+  </Grid>
 </Window>
-
 

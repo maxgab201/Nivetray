@@ -13,9 +13,26 @@ using System.Text;
 using System.Runtime.InteropServices;
 public static class UiSmokeNative {
     public struct Rect { public int Left, Top, Right, Bottom; }
+    private struct MonitorInfo { public int Size; public Rect Monitor, Work; public uint Flags; }
+    private delegate bool MonitorCallback(IntPtr monitor, IntPtr dc, ref Rect rect, IntPtr data);
+    [DllImport("user32.dll")] private static extern bool EnumDisplayMonitors(IntPtr dc, IntPtr clip, MonitorCallback callback, IntPtr data);
+    [DllImport("user32.dll")] private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
+    public static Rect[] MonitorAreas() {
+        var areas = new System.Collections.Generic.List<Rect>();
+        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr monitor, IntPtr dc, ref Rect rect, IntPtr data) => {
+            var info = new MonitorInfo { Size = Marshal.SizeOf(typeof(MonitorInfo)) };
+            if (GetMonitorInfo(monitor, ref info)) areas.Add(info.Work);
+            return true;
+        }, IntPtr.Zero);
+        return areas.ToArray();
+    }
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);
     [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hwnd, IntPtr dc, uint flags);
     [DllImport("user32.dll")] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
+    [DllImport("user32.dll")] public static extern uint GetGuiResources(IntPtr process, uint flag);
+    [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern IntPtr GetWindowDpiAwarenessContext(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern int GetAwarenessFromDpiAwarenessContext(IntPtr context);
     public delegate bool Callback(IntPtr hwnd, IntPtr state);
     [DllImport("user32.dll")] public static extern bool EnumWindows(Callback callback, IntPtr state);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
@@ -26,6 +43,7 @@ public static class UiSmokeNative {
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wparam, IntPtr lparam);
 }
 '@
+$null = [UiSmokeNative]::SetThreadDpiAwarenessContext([IntPtr](-4))
 $tag = 'DemoServer-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
 $fixturePath = Join-Path $PSScriptRoot 'Nivetray.Tests/bin/Release/net10.0-windows/Nivetray.Tests.exe'
 $fixtureStart = [Diagnostics.ProcessStartInfo]::new($fixturePath, "--fixture $tag 0")
@@ -115,6 +133,7 @@ try {
     if ($null -eq $root) { throw 'Application window did not open. Close existing Nivetray instances before testing.' }
     # Exercise the same managed OpenPanel path as a tray double-click. Native ShowWindow alone
     # cannot change WPF's Visibility state after a close-to-tray operation.
+    $script:trayEvent = 0x203
     $openFromTray = [UiSmokeNative+Callback] { param($hwnd, $state)
         [uint32]$ownerId = 0
         $null = [UiSmokeNative]::GetWindowThreadProcessId($hwnd, [ref]$ownerId)
@@ -122,7 +141,7 @@ try {
             $className = [System.Text.StringBuilder]::new(256)
             $null = [UiSmokeNative]::GetClassName($hwnd, $className, 256)
             if ($className.ToString().StartsWith('WindowsForms10.')) {
-                $null = [UiSmokeNative]::PostMessage($hwnd, 0x800, [IntPtr]::Zero, [IntPtr]0x203)
+                $null = [UiSmokeNative]::PostMessage($hwnd, 0x800, [IntPtr]::Zero, [IntPtr]$script:trayEvent)
             }
         }
         return $true
@@ -135,6 +154,14 @@ try {
     if ($null -eq (Find-Control 'Refresh')) {
         $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) | ForEach-Object { $_.Current.Name } | Write-Output
         throw 'Main panel is not accessible. This run did not validate the UI.'
+    }
+    Write-Output ("Owned WPF window DPI: {0}; awareness: {1} (2 = per monitor)." -f [UiSmokeNative]::GetDpiForWindow($script:appHandle), [UiSmokeNative]::GetAwarenessFromDpiAwarenessContext([UiSmokeNative]::GetWindowDpiAwarenessContext($script:appHandle)))
+    $appDirectory = Split-Path (Resolve-Path $AppPath).Path
+    if (Test-Path (Join-Path $appDirectory 'coreclr.dll')) {
+        $app.Refresh()
+        $runtime = $app.Modules | Where-Object ModuleName -eq 'coreclr.dll' | Select-Object -First 1
+        if ($null -eq $runtime -or (Split-Path $runtime.FileName) -ne $appDirectory) { throw 'Portable did not load its packaged runtime.' }
+        Write-Output 'PASS: portable loads its own packaged .NET runtime.'
     }
     Start-Sleep -Seconds 2
     $app.Refresh()
@@ -166,6 +193,20 @@ try {
     $search.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($tag)
     Start-Sleep -Milliseconds 300
     Capture 'available-light'
+    for ($warmup = 0; $warmup -lt 5; $warmup++) { Invoke-Control 'Refresh' }
+    $app.Refresh()
+    $beforeHandles = $app.HandleCount
+    $beforeGdi = [UiSmokeNative]::GetGuiResources($app.Handle, 0)
+    for ($refresh = 0; $refresh -lt 10; $refresh++) { Invoke-Control 'Refresh' }
+    $app.Refresh()
+    $afterGdi = [UiSmokeNative]::GetGuiResources($app.Handle, 0)
+    Write-Output ("Refresh sample (10 cycles): handles {0}->{1}; GDI objects {2}->{3}; private {4} MiB." -f $beforeHandles, $app.HandleCount, $beforeGdi, $afterGdi, [math]::Round($app.PrivateMemorySize64 / 1MB, 1))
+    for ($refresh = 0; $refresh -lt 10; $refresh++) { Invoke-Control 'Refresh' }
+    $app.Refresh()
+    $settledGdi = [UiSmokeNative]::GetGuiResources($app.Handle, 0)
+    Write-Output ("Second refresh batch: GDI {0}->{1}; private {2} MiB." -f $afterGdi, $settledGdi, [math]::Round($app.PrivateMemorySize64 / 1MB, 1))
+    # Separate initial native font/control warm-up from sustained resource growth.
+    if ($settledGdi -gt $afterGdi + 3 -and $settledGdi -gt $beforeGdi + 8) { throw 'GDI count continued growing after warm-up; inspect resource ownership.' }
     $title = Find-Control ($tag + ' A')
     if ($null -eq $title) { throw 'Fixture was not detected by the WPF interface.' }
     $item = $title
@@ -174,6 +215,36 @@ try {
     }
     $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
     Invoke-Control 'Hide selected window'
+    $root.SetFocus()
+    for ($attempt = 0; $attempt -lt 30; $attempt++) {
+        $progressControl = By-Id 'Progress'
+        if ($null -eq $progressControl -or $progressControl.Current.IsOffscreen) { break }
+        Start-Sleep -Milliseconds 100
+    }
+    $script:trayEvent = 0x205
+    $null = [UiSmokeNative]::EnumWindows($openFromTray, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 300
+    $menuCondition = [System.Windows.Automation.AndCondition]::new(
+        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $app.Id),
+        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Menu))
+    $trayMenu = $null
+    for ($attempt = 0; $attempt -lt 20 -and $null -eq $trayMenu; $attempt++) {
+        $trayMenu = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children, $menuCondition)
+        if ($null -eq $trayMenu) { Start-Sleep -Milliseconds 100 }
+    }
+    if ($null -eq $trayMenu) {
+        $owned = [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children,
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $app.Id))
+        foreach ($element in $owned) { Write-Output ("Owned UI root: {0}; {1}; {2}." -f $element.Current.Name, $element.Current.ControlType.ProgrammaticName, $element.Current.ClassName) }
+        throw 'Tray context menu did not open.'
+    }
+    $menuItems = $trayMenu.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+        [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::MenuItem))
+    $viewAll = $menuItems | Where-Object { $_.Current.Name.StartsWith('View all hidden windows (') } | Select-Object -First 1
+    if ($null -eq $viewAll) { throw 'Tray View all / Search action is missing.' }
+    $viewAll.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Start-Sleep -Milliseconds 300
+    Write-Output 'PASS: tray right-click event opens bounded menu and View all opens searchable hidden panel.'
     Select-Tab 'Hidden windows'
     Start-Sleep -Milliseconds 300
     Capture 'hidden-light'
@@ -196,9 +267,10 @@ try {
     if ($AttachProcessId -eq 0) {
         Select-Tab 'Applications'
         (By-Id 'RulePath').GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($fixturePath)
+        (By-Id 'FavoriteRule').GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle()
         Invoke-Control 'Save rule'
         $settings = Get-Content (Join-Path $profile 'settings.json') -Raw | ConvertFrom-Json
-        if ($settings.Rules.Count -ne 1 -or $settings.Rules[0].Mode -ne 'Manage') { throw 'Favorite rule did not persist.' }
+        if ($settings.Rules.Count -ne 1 -or $settings.Rules[0].Mode -ne 'Standard' -or -not $settings.Rules[0].IsFavorite) { throw 'Independent favorite and visibility rule did not persist.' }
         (By-Id 'RulesSearch').GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue('no-match-xyz')
         Start-Sleep -Milliseconds 200
         $list = By-Id 'RulesList'
@@ -216,17 +288,40 @@ try {
         Select-Tab 'Hidden windows'
         Capture 'hidden-dark'
         $transform = $root.GetCurrentPattern([System.Windows.Automation.TransformPattern]::Pattern)
-        $transform.Resize(1260, 960)
+        $dpi = [UiSmokeNative]::GetDpiForWindow($script:appHandle)
+        $transform.Resize(840 * $dpi / 96, 640 * $dpi / 96)
         Start-Sleep -Milliseconds 300
         Capture 'compact-dark'
         $window = $root.GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern)
         $window.SetWindowVisualState([System.Windows.Automation.WindowVisualState]::Maximized)
         Start-Sleep -Milliseconds 250
         $window.SetWindowVisualState([System.Windows.Automation.WindowVisualState]::Normal)
+        $originalBounds = $root.Current.BoundingRectangle
+        $monitorIndex = 0
+        foreach ($area in [UiSmokeNative]::MonitorAreas()) {
+            $transform.Move($area.Left + 20, $area.Top + 20)
+            Start-Sleep -Milliseconds 300
+            $dpi = [UiSmokeNative]::GetDpiForWindow($script:appHandle)
+            Write-Output ("Monitor {0}: actual owned-window DPI {1}; awareness {2}." -f $monitorIndex, $dpi, [UiSmokeNative]::GetAwarenessFromDpiAwarenessContext([UiSmokeNative]::GetWindowDpiAwarenessContext($script:appHandle)))
+            if ($root.Current.IsOffscreen) { throw 'Owned window became inaccessible after monitor move.' }
+            Capture ('monitor-' + $monitorIndex)
+            $monitorIndex++
+        }
+        $transform.Move($originalBounds.Left, $originalBounds.Top)
         Select-Tab 'Settings'
         $settings = Get-Content (Join-Path $profile 'settings.json') -Raw | ConvertFrom-Json
         if ($settings.Theme -ne 'Dark') { throw 'Dark theme was not persisted.' }
         Select-Theme 'System'
+        Invoke-Control 'Send Nivetray to tray'
+        $secondStart = [Diagnostics.ProcessStartInfo]::new((Resolve-Path $AppPath).Path)
+        $secondStart.UseShellExecute = $false
+        $secondStart.CreateNoWindow = $true
+        $second = [Diagnostics.Process]::Start($secondStart)
+        if (-not $second.WaitForExit(5000)) { throw 'Second instance did not activate the existing app and exit.' }
+        $second.Dispose()
+        if ($app.HasExited) { throw 'Original app exited when opening a second instance.' }
+        Start-Sleep -Milliseconds 300
+        if ($root.Current.IsOffscreen) { throw 'Second instance did not reopen the hidden panel.' }
         Write-Output 'PASS: isolated profile, favorite rules, rule search/removal, light/dark/system themes, resize and maximize/restore.'
     }
     Select-Tab 'Settings'

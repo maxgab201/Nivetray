@@ -29,6 +29,10 @@ internal sealed class TrayController : IDisposable
     }
     public void Refresh()
     {
+        icon.Text = $"Nivetray — {manager.Hidden.Count} hidden";
+        // An async discovery/restore may finish while the user is reading the menu.
+        // Keep that menu stable; Opening always rebuilds it from current entries.
+        if (menu.Visible) return;
         foreach (var item in menu.Items.Cast<Forms.ToolStripItem>().ToArray()) item.Dispose();
         menu.Items.Clear();
         Add("Open Nivetray", open);
@@ -45,7 +49,6 @@ internal sealed class TrayController : IDisposable
         Add("Restore all", restoreAll, manager.Hidden.Count > 0);
         menu.Items.Add(new Forms.ToolStripSeparator());
         Add("Settings", settings); Add("Restore all and exit", exit);
-        icon.Text = $"Nivetray — {manager.Hidden.Count} hidden";
     }
     private void Add(string label, Action action, bool enabled = true)
     {

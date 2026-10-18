@@ -36,7 +36,8 @@ internal sealed class ThemeManager : IDisposable
                 color = keys[i] switch
                 {
                     "Text" or "Muted" or "Error" => SystemColors.WindowTextColor,
-                    "Accent" or "Hover" or "AccentSoft" => SystemColors.HighlightColor,
+                    "Accent" => SystemColors.HighlightColor,
+                    "Hover" or "AccentSoft" => SystemColors.WindowColor,
                     "AccentText" => SystemColors.HighlightTextColor,
                     "Line" => SystemColors.WindowTextColor,
                     _ => SystemColors.WindowColor
