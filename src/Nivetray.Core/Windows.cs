@@ -11,16 +11,34 @@ public sealed record AppWindow(WindowIdentity Identity, string Title, string Exe
 
 public enum RuleMode { Manage, Include, Exclude }
 public sealed record ApplicationRule(string ExecutablePath, RuleMode Mode);
+public enum AppTheme { System, Light, Dark }
 
 public sealed class Preferences
 {
+    public int SchemaVersion { get; set; } = 2;
     public bool CloseToTray { get; set; } = true;
+    public AppTheme Theme { get; set; } = AppTheme.System;
+    public bool TrayNotifications { get; set; } = true;
+    public bool ShowAuxiliaryWindows { get; set; }
     public List<ApplicationRule> Rules { get; set; } = [];
+}
+
+public static class WindowSearch
+{
+    public static bool Matches(AppWindow window, string query) =>
+        string.Join(" ", window.Title, window.Name, window.ExecutablePath)
+            .Contains(query.Trim(), StringComparison.OrdinalIgnoreCase);
+    public static string RuleLabel(RuleMode mode) => mode switch
+    {
+        RuleMode.Manage => "Favorite",
+        RuleMode.Include => "Include helper windows",
+        _ => "Exclude from list"
+    };
 }
 
 public static class WindowFilter
 {
-    public static bool Accept(AppWindow window, IReadOnlyList<ApplicationRule> rules)
+    public static bool Accept(AppWindow window, IReadOnlyList<ApplicationRule> rules, bool showAuxiliary = false)
     {
         // Safety exclusions cannot be overridden. Include only relaxes auxiliary-window filtering.
         if (!window.IsVisible || window.IsCloaked || window.IsSystem || window.IsSelf ||
@@ -29,7 +47,7 @@ public static class WindowFilter
         var rule = rules.LastOrDefault(r => string.Equals(r.ExecutablePath, window.ExecutablePath,
             StringComparison.OrdinalIgnoreCase));
         if (rule?.Mode == RuleMode.Exclude) return false;
-        return rule?.Mode == RuleMode.Include || (!window.IsOwned && !window.IsToolWindow);
+        return rule?.Mode == RuleMode.Include || showAuxiliary || (!window.IsOwned && !window.IsToolWindow);
     }
 }
 

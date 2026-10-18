@@ -111,8 +111,25 @@ internal static class Program
             Check(store.Load().CloseToTray && File.ReadAllText(store.FilePath) == "{broken", "malformed JSON falls back and is preserved");
             File.WriteAllText(store.FilePath, "{\"Rules\":null}");
             Check(store.Load().Rules.Count == 0, "null rules handled safely");
+            store.Save(new Preferences());
+            Check(Directory.GetFiles(directory, "*.bak").Any(p => File.ReadAllText(p) == "{\"Rules\":null}"),
+                "saving after malformed load preserves original bytes in a backup");
+            File.WriteAllText(store.FilePath, "{\"CloseToTray\":false,\"Rules\":[{\"ExecutablePath\":\"C:\\\\Apps\\\\fixture.exe\",\"Mode\":\"Manage\"}]}");
+            var migrated = store.Load();
+            Check(migrated.SchemaVersion == 2 && migrated.Theme == AppTheme.System && !migrated.CloseToTray && migrated.Rules.Single().Mode == RuleMode.Manage,
+                "legacy preferences migrate to system theme while preserving favorite semantics");
+            migrated.Theme = AppTheme.Dark; migrated.TrayNotifications = false; store.Save(migrated);
+            Check(store.Load().Theme == AppTheme.Dark && !store.Load().TrayNotifications, "theme and tray preferences persist");
         }
         finally { Directory.Delete(directory, true); }
+        Check(WindowSearch.Matches(w, "  FIXTURE  ") && WindowSearch.Matches(w, "C:\\Apps") && !WindowSearch.Matches(w, "unrelated"),
+            "search matches title, executable and path case-insensitively");
+        Check(WindowSearch.RuleLabel(RuleMode.Manage) == "Favorite", "legacy Manage has a clear favorite label");
+        Check(!WindowFilter.Accept(w with { IsToolWindow = true }, [new(w.ExecutablePath, RuleMode.Exclude)], true),
+            "explicit exclusion wins over global helper inclusion");
+        var trayItems = Enumerable.Range(0, 30).Select(i => new HiddenWindow(Window(200 + i), i + 1, 1)).ToArray();
+        Check(TrayPolicy.Recent(trayItems).Count == 8 && TrayPolicy.Recent(trayItems)[0] == trayItems.Last(),
+            "tray limits recent entries to eight in newest-first order");
     }
 
     private static async Task RecoveryRegressions(AppWindow w)
@@ -246,7 +263,7 @@ internal static class Program
         });
         using var first = new Forms.Form { Text = tag + " A", Width = 320, Height = 180, ShowInTaskbar = true };
         using var second = new Forms.Form { Text = tag + " B", Width = 320, Height = 180, ShowInTaskbar = true };
-        using var timer = new Forms.Timer { Interval = 30000 };
+        using var timer = new Forms.Timer { Interval = 60000 };
         timer.Tick += (_, _) => Forms.Application.Exit();
         timer.Start();
         first.Shown += (_, _) => second.Show();

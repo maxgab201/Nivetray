@@ -30,8 +30,10 @@ public sealed class Win32WindowPlatform(Action<string> log) : IWindowPlatform, I
             {
                 var id = ReadIdentity(hwnd);
                 if (id is null) return true;
-                using var process = Process.GetProcessById(id.ProcessId);
-                var path = process.MainModule?.FileName;
+                using var process = Native.OpenProcess(0x1000, false, (uint)id.ProcessId);
+                var buffer = new StringBuilder(32768);
+                uint length = (uint)buffer.Capacity;
+                var path = !process.IsInvalid && Native.QueryFullProcessImageName(process, 0, buffer, ref length) ? buffer.ToString() : null;
                 if (string.IsNullOrEmpty(path)) return true;
                 Native.DwmGetWindowAttribute(hwnd, 14, out var cloaked, sizeof(int));
                 if (cloaked != 0 || SystemClasses.Contains(id.ClassName) ||
