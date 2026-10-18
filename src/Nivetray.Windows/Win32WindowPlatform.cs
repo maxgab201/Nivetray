@@ -24,6 +24,8 @@ public sealed class Win32WindowPlatform(Action<string> log) : IWindowPlatform, I
         Native.EnumWindows((hwnd, _) =>
         {
             if (!Native.IsWindowVisible(hwnd)) return true;
+            Native.GetWindowThreadProcessId(hwnd, out var owner);
+            if (owner == Environment.ProcessId) return true;
             var title = Text(hwnd, false);
             if (string.IsNullOrWhiteSpace(title)) return true;
             try
@@ -35,7 +37,8 @@ public sealed class Win32WindowPlatform(Action<string> log) : IWindowPlatform, I
                 uint length = (uint)buffer.Capacity;
                 var path = !process.IsInvalid && Native.QueryFullProcessImageName(process, 0, buffer, ref length) ? buffer.ToString() : null;
                 if (string.IsNullOrEmpty(path)) return true;
-                Native.DwmGetWindowAttribute(hwnd, 14, out var cloaked, sizeof(int));
+                if (Native.DwmGetWindowAttribute(hwnd, 14, out var cloaked, sizeof(int)) != 0)
+                { log("Skipped window: DWM visibility could not be verified."); return true; }
                 if (cloaked != 0 || SystemClasses.Contains(id.ClassName) ||
                     SystemExecutables.Contains(Path.GetFileNameWithoutExtension(path)) || id.ProcessId == Environment.ProcessId)
                     return true;
@@ -69,7 +72,7 @@ public sealed class Win32WindowPlatform(Action<string> log) : IWindowPlatform, I
         return result;
     }
 
-    public bool Matches(WindowIdentity identity) => ReadIdentity(identity.Handle) == identity;
+    public bool Matches(WindowIdentity identity) => identity.InstanceToken != 0 && ReadIdentity(identity.Handle) == identity;
     public IdentityState Inspect(WindowIdentity identity)
     {
         var hwnd = identity.Handle;
@@ -120,8 +123,29 @@ public sealed class Win32WindowPlatform(Action<string> log) : IWindowPlatform, I
             {
                 // Keep recovery tracked when the owning UI thread does not respond.
                 var responsive = await Task.Run(() => Native.SendMessageTimeout(identity.Handle, 0, 0, 0, 3, 200, out _) != 0);
-                return responsive && HasMark(identity, token) && Native.IsWindowVisible(identity.Handle) == visible;
+                return responsive && HasMark(identity, token) && Native.IsWindowVisible(identity.Handle) == visible &&
+                    (!visible || await EnsureOnScreenAsync(identity, token));
             }
+        }
+        return false;
+    }
+
+    private async Task<bool> EnsureOnScreenAsync(WindowIdentity identity, nint token)
+    {
+        var hwnd = identity.Handle;
+        if (!HasMark(identity, token)) return false;
+        if (Native.IsIconic(hwnd) || Native.MonitorFromWindow(hwnd, 0) != 0) return true;
+        // A disconnected display can leave a successfully shown window completely off-screen.
+        // Only repair that case; leave normal on-screen position and size untouched.
+        var monitor = Native.MonitorFromWindow(hwnd, 2);
+        var info = new Native.MonitorInfo { Size = Marshal.SizeOf<Native.MonitorInfo>() };
+        if (monitor == 0 || !Native.GetMonitorInfo(monitor, ref info) || !HasMark(identity, token)) return false;
+        if (!Native.SetWindowPos(hwnd, 0, info.Work.Left + 24, info.Work.Top + 24, 0, 0, 0x4015)) return false;
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            await Task.Delay(40);
+            if (!HasMark(identity, token)) return false;
+            if (Native.MonitorFromWindow(hwnd, 0) != 0) return true;
         }
         return false;
     }

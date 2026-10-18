@@ -13,17 +13,22 @@ using Forms = System.Windows.Forms;
 
 namespace Nivetray.Tests;
 
-internal static class Program
+internal static partial class Program
 {
     private static int passed;
     [STAThread]
     private static int Main(string[] args)
     {
         if (args.FirstOrDefault() == "--fixture") { RunFixture(args[1], int.Parse(args[2])); return 0; }
+        if (args.FirstOrDefault() == "--console-fixture") { RunConsoleFixture(args[1], args[2], args[3]); return 0; }
         try
         {
             RunTests().GetAwaiter().GetResult();
-            if (args.Contains("--native")) RunNativeTest().GetAwaiter().GetResult();
+            if (args.Contains("--native"))
+            {
+                RunNativeTest().GetAwaiter().GetResult();
+                RunConsoleTest().GetAwaiter().GetResult();
+            }
             Console.WriteLine($"PASS: {passed} assertions. Native integration: {args.Contains("--native")}.");
             return 0;
         }
@@ -98,6 +103,7 @@ internal static class Program
         await manager.HideAsync(w); await manager.HideAsync(Window(102));
         Check(await manager.RestoreAllAsync() && manager.Hidden.Count == 0, "shutdown restores all windows");
         await RecoveryRegressions(w);
+        await ResourceRegressions();
 
         var directory = Path.Combine(Path.GetTempPath(), "Nivetray.Tests." + Guid.NewGuid().ToString("N"));
         try
@@ -116,10 +122,14 @@ internal static class Program
                 "saving after malformed load preserves original bytes in a backup");
             File.WriteAllText(store.FilePath, "{\"CloseToTray\":false,\"Rules\":[{\"ExecutablePath\":\"C:\\\\Apps\\\\fixture.exe\",\"Mode\":\"Manage\"}]}");
             var migrated = store.Load();
-            Check(migrated.SchemaVersion == 2 && migrated.Theme == AppTheme.System && !migrated.CloseToTray && migrated.Rules.Single().Mode == RuleMode.Manage,
+            Check(migrated.SchemaVersion == 3 && migrated.Theme == AppTheme.System && !migrated.CloseToTray && migrated.Rules.Single().Mode == RuleMode.Standard && migrated.Rules.Single().IsFavorite,
                 "legacy preferences migrate to system theme while preserving favorite semantics");
             migrated.Theme = AppTheme.Dark; migrated.TrayNotifications = false; store.Save(migrated);
             Check(store.Load().Theme == AppTheme.Dark && !store.Load().TrayNotifications, "theme and tray preferences persist");
+            migrated.Rules = [new(w.ExecutablePath, RuleMode.Include, true)];
+            store.Save(migrated);
+            Check(store.Load().Rules.Single().IsFavorite && store.Load().Rules.Single().Mode == RuleMode.Include,
+                "favorite and helper-window inclusion are independent preferences");
         }
         finally { Directory.Delete(directory, true); }
         Check(WindowSearch.Matches(w, "  FIXTURE  ") && WindowSearch.Matches(w, "C:\\Apps") && !WindowSearch.Matches(w, "unrelated"),
@@ -187,12 +197,42 @@ internal static class Program
             "native exception retains the recovery entry");
         fake.ThrowOnRestore = false;
         Check(await manager.RestoreAllAsync(), "native failure can be retried");
+        fake = new(w) { ThrowOnHide = true }; manager = new(fake, _ => { });
+        Check(!(await manager.HideAsync(w)).Success && manager.Hidden.Count == 1 && manager.Hidden[0].State == RecoveryState.NeedsAttention,
+            "hide exception after tracking retains actionable recovery");
+        fake.ThrowOnHide = false;
+        Check(await manager.RestoreAllAsync(), "hide exception can be recovered without dropping the entry");
         for (var cycle = 0; cycle < 10; cycle++)
         {
             await manager.HideAsync(w);
             Check(await manager.RestoreAllAsync() && manager.Hidden.Count == 0,
                 "repeat hide/restore cycle " + cycle);
         }
+    }
+
+    private static async Task ResourceRegressions()
+    {
+        using var release = new ManualResetEventSlim();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        var cache = new BoundedResourceCache<object>(2, _ =>
+        { Interlocked.Increment(ref calls); started.TrySetResult(); release.Wait(); return new object(); });
+        try
+        {
+            var request = cache.GetAsync("blocked-icon", TimeSpan.FromMilliseconds(40));
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Check(await request is null, "blocked resource IO has a bounded wait");
+            Check(cache.Cached("blocked-icon") is null, "UI cache reads do not wait on blocked resource IO");
+            Check(await cache.GetAsync("another-icon", TimeSpan.FromMilliseconds(40)) is null && calls == 1,
+                "blocked resource cannot accumulate additional workers");
+        }
+        finally { release.Set(); }
+        for (var i = 0; i < 100 && cache.Cached("blocked-icon") is null; i++) await Task.Delay(10);
+        Check(cache.Cached("BLOCKED-ICON") is not null, "late resource result is cached safely and case-insensitively");
+        using var cancel = new CancellationTokenSource(); cancel.Cancel();
+        var slow = new BoundedResourceCache<object>(1, _ => { release.Wait(); return new(); });
+        try { await slow.GetAsync("cancelled", TimeSpan.FromSeconds(5), cancel.Token); Check(false, "cancelled resource read must not succeed"); }
+        catch (OperationCanceledException) { Check(true, "resource wait honors discovery shutdown cancellation"); }
     }
 
     private static async Task RunNativeTest()
@@ -204,7 +244,7 @@ internal static class Program
         var port = ((IPEndPoint)reservation.LocalEndpoint).Port;
         reservation.Stop();
         using var process = Process.Start(new ProcessStartInfo(Environment.ProcessPath!, $"--fixture {tag} {port}")
-            { UseShellExecute = false, CreateNoWindow = true }) ?? throw new InvalidOperationException("Cannot start fixture.");
+        { UseShellExecute = false, CreateNoWindow = true }) ?? throw new InvalidOperationException("Cannot start fixture.");
         using var platform = new Win32WindowPlatform(Console.WriteLine);
         var manager = new WindowManager(platform, Console.WriteLine);
         try
@@ -228,6 +268,35 @@ internal static class Program
             }
             Check(!process.HasExited, "fixture process remains alive while hidden");
             Check(await manager.RestoreAllAsync() && platform.IsVisible(windows[0].Identity), "native restore-all confirms visibility");
+            NativeFixture.ShowWindowAsync(windows[0].Identity.Handle, 3);
+            await Task.Delay(200);
+            await manager.HideAsync(windows[0]);
+            Check(await manager.RestoreAllAsync() && NativeFixture.IsZoomed(windows[0].Identity.Handle), "native maximized state preserved");
+            NativeFixture.ShowWindowAsync(windows[0].Identity.Handle, 6);
+            await Task.Delay(200);
+            await manager.HideAsync(windows[0]);
+            Check(await manager.RestoreAllAsync() && NativeFixture.IsIconic(windows[0].Identity.Handle), "native minimized state preserved");
+            NativeFixture.ShowWindowAsync(windows[0].Identity.Handle, 9);
+            await Task.Delay(200);
+            NativeFixture.SetWindowPos(windows[0].Identity.Handle, 0, 100000, 100000, 0, 0, 0x4015);
+            await Task.Delay(200);
+            Check(NativeFixture.MonitorFromWindow(windows[0].Identity.Handle, 0) == 0, "isolated fixture moved fully off available displays");
+            await manager.HideAsync(windows[0]);
+            Check(await manager.RestoreAllAsync() && NativeFixture.MonitorFromWindow(windows[0].Identity.Handle, 0) != 0,
+                "off-screen fixture recovery relocates to an available display");
+            await manager.HideAsync(windows[0]);
+            Check(NativeFixture.DropNivetrayProperty(windows[0].Identity.Handle, false), "removed authorization on our own native fixture only");
+            manager.Prune();
+            Check(manager.Hidden.Count == 1 && await manager.RestoreAllAsync(), "native authorization loss remains tracked and recovers safely");
+            await manager.HideAsync(windows[0]);
+            Check(NativeFixture.DropNivetrayProperty(windows[0].Identity.Handle, true), "removed lifetime stamp on our own native fixture only");
+            Check(!await manager.RestoreAllAsync() && manager.Hidden.Count == 1, "native missing lifetime stamp cannot authorize restoration");
+            // Fixture-owned cleanup deliberately shows its own test HWND. Production never bypasses validation.
+            NativeFixture.ShowWindowAsync(windows[0].Identity.Handle, 4);
+            await Task.Delay(200);
+            platform.Enumerate(); manager.Prune();
+            Check(platform.Inspect(windows[0].Identity) == IdentityState.Unavailable && manager.Hidden.Count == 1,
+                "rediscovery does not replace a missing lifetime stamp with false proof of HWND reuse");
             // Native window destruction invalidates its lifetime stamp.
             var old = windows[0];
             process.CloseMainWindow();
@@ -280,6 +349,7 @@ internal static class Program
         public IdentityState? IdentityOverride { get; set; }
         public TaskCompletionSource? OperationGate { get; set; }
         public bool ThrowOnRestore { get; set; }
+        public bool ThrowOnHide { get; set; }
         public bool FailOperation { get; set; }
         public IReadOnlyList<AppWindow> Enumerate() => current.Values.ToArray();
         public void Replace(AppWindow w) { current[w.Identity.Handle] = w; marks.Remove(w.Identity.Handle); }
@@ -296,6 +366,7 @@ internal static class Program
         {
             if (OperationGate is not null) await OperationGate.Task;
             if (visible && ThrowOnRestore) throw new InvalidOperationException("Simulated native failure");
+            if (!visible && ThrowOnHide) throw new InvalidOperationException("Simulated native hide failure");
             if (!HasMark(id, token)) return false;
             Commands.Add(visible ? showCommand : 0);
             if (FailOperation) return false;

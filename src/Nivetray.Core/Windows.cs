@@ -9,13 +9,17 @@ public sealed record AppWindow(WindowIdentity Identity, string Title, string Exe
     public string Name => Path.GetFileNameWithoutExtension(ExecutablePath);
 }
 
-public enum RuleMode { Manage, Include, Exclude }
-public sealed record ApplicationRule(string ExecutablePath, RuleMode Mode);
+public enum RuleMode { Manage, Include, Exclude, Standard }
+public sealed record ApplicationRule(string ExecutablePath, RuleMode Mode, bool IsFavorite = false)
+{
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool Favorite => IsFavorite || Mode == RuleMode.Manage;
+}
 public enum AppTheme { System, Light, Dark }
 
 public sealed class Preferences
 {
-    public int SchemaVersion { get; set; } = 2;
+    public int SchemaVersion { get; set; } = 3;
     public bool CloseToTray { get; set; } = true;
     public AppTheme Theme { get; set; } = AppTheme.System;
     public bool TrayNotifications { get; set; } = true;
@@ -32,7 +36,8 @@ public static class WindowSearch
     {
         RuleMode.Manage => "Favorite",
         RuleMode.Include => "Include helper windows",
-        _ => "Exclude from list"
+        RuleMode.Exclude => "Exclude from list",
+        _ => "Show standard windows"
     };
 }
 
@@ -95,7 +100,7 @@ public sealed class WindowManager(IWindowPlatform platform, Action<string> log)
         {
             Prune();
             inFlight = true;
-            if (hidden.ContainsKey(id.Handle)) return WindowResult.Fail("This window is already hidden.");
+            if (hidden.ContainsKey(id.Handle)) return WindowResult.Fail("This window is already managed. Use Restore in Hidden windows.");
             if (!platform.Matches(id) || !platform.IsVisible(id))
                 return Failure("The selected window has closed or changed. Refresh the list.");
             var token = checked(++nextToken);
@@ -111,6 +116,13 @@ public sealed class WindowManager(IWindowPlatform platform, Action<string> log)
             }
             // An asynchronous request may complete late. Keep the recovery entry until restored.
             return Attention(entry, "Hiding was not confirmed. Keep Nivetray running and choose Restore to recover this window.");
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            log("Hide platform error: " + ex.GetType().Name);
+            return hidden.TryGetValue(id.Handle, out var entry)
+                ? Attention(entry, "Hiding failed or is still pending. Keep Nivetray running and retry Restore.")
+                : Failure("This window could not be hidden. Refresh the list and try again.");
         }
         finally { inFlight = false; operations.Release(); }
     }
@@ -130,7 +142,7 @@ public sealed class WindowManager(IWindowPlatform platform, Action<string> log)
     {
         var id = entry.Window.Identity;
         if (!hidden.TryGetValue(id.Handle, out var current) || current.Token != entry.Token || current.Window.Identity != id)
-                return WindowResult.Fail("This entry is no longer managed.");
+            return WindowResult.Fail("This entry is no longer managed.");
         try
         {
             var identity = platform.Inspect(id);
@@ -182,7 +194,7 @@ public sealed class WindowManager(IWindowPlatform platform, Action<string> log)
             else if (identity == IdentityState.Unavailable || !platform.HasMark(entry.Window.Identity, entry.Token))
             {
                 entry.State = RecoveryState.NeedsAttention;
-                entry.Error = "Recovery needs attention. Retry Restore; do not force-stop Nivetray.";
+                entry.Error ??= "Recovery needs attention. Retry Restore; do not force-stop Nivetray.";
             }
         }
     }

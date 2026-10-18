@@ -11,6 +11,7 @@ internal static class Native
     internal delegate bool EnumProc(nint hwnd, nint state);
     [DllImport("user32.dll")] internal static extern bool EnumWindows(EnumProc callback, nint state);
     [DllImport("user32.dll")] internal static extern bool IsWindow(nint hwnd);
+    [DllImport("user32.dll")] internal static extern nint SetThreadDpiAwarenessContext(nint context);
     [DllImport("user32.dll")] internal static extern bool IsWindowVisible(nint hwnd);
     [DllImport("user32.dll")] internal static extern uint GetWindowThreadProcessId(nint hwnd, out uint pid);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern int GetWindowText(nint hwnd, StringBuilder text, int max);
@@ -25,6 +26,11 @@ internal static class Native
     [DllImport("user32.dll")] internal static extern bool ShowWindowAsync(nint hwnd, int command);
     [DllImport("user32.dll", SetLastError = true)] internal static extern nint SendMessageTimeout(nint hwnd, uint message, nint wparam, nint lparam, uint flags, uint timeout, out nint result);
     [DllImport("user32.dll")] internal static extern bool GetWindowPlacement(nint hwnd, ref Placement placement);
+    [DllImport("user32.dll")] internal static extern bool IsIconic(nint hwnd);
+    [DllImport("user32.dll")] internal static extern nint MonitorFromWindow(nint hwnd, uint flags);
+    [DllImport("user32.dll")] internal static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
+    [DllImport("user32.dll")] internal static extern bool SetWindowPos(nint hwnd, nint after, int x, int y, int width, int height, uint flags);
+    [StructLayout(LayoutKind.Sequential)] internal struct MonitorInfo { public int Size; public Rect Monitor, Work; public uint Flags; }
     [StructLayout(LayoutKind.Sequential)] internal struct Point { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] internal struct Rect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] internal struct Placement

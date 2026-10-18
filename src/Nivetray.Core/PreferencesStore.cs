@@ -19,11 +19,12 @@ public sealed class PreferencesStore(string directory, Action<string> log)
             if (!File.Exists(FilePath)) return new();
             var value = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(FilePath), Options)
                 ?? throw new JsonException("Empty settings.");
-            if (!Enum.IsDefined(value.Theme) || value.SchemaVersion > 2 || value.Rules is null || value.Rules.Any(r => r is null ||
+            if (!Enum.IsDefined(value.Theme) || value.SchemaVersion > 3 || value.Rules is null || value.Rules.Any(r => r is null ||
                 string.IsNullOrWhiteSpace(r.ExecutablePath) || !Enum.IsDefined(r.Mode)))
                 throw new JsonException("Invalid application rules.");
             // v1 files have no version field: JSON defaults preserve their modes and close behavior.
-            value.SchemaVersion = 2;
+            value.Rules = value.Rules.Select(r => r.Mode == RuleMode.Manage ? r with { Mode = RuleMode.Standard, IsFavorite = true } : r).ToList();
+            value.SchemaVersion = 3;
             return value;
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
