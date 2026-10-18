@@ -5,6 +5,15 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      draft_release:
+        description: 'Create a draft release for this existing version tag (requires explicit maintainer approval)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: windows-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -25,16 +34,15 @@ jobs:
         run: dotnet build Nivetray.sln -c Release
       - name: Test safety and preferences
         run: dotnet run --project tests/Nivetray.Tests -c Release --no-build
-      - name: Publish self-contained portable app
-        run: dotnet publish src/Nivetray.App -c Release -r ${{ matrix.runtime }} --self-contained true -o artifacts/portable/${{ matrix.runtime }}
-      - name: Package and checksum
+      - name: Verify version for tags
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
-          Copy-Item LICENSE, README.md artifacts/portable/${{ matrix.runtime }}/
-          Compress-Archive -Path artifacts/portable/${{ matrix.runtime }}/* -DestinationPath artifacts/Nivetray-${{ matrix.runtime }}.zip
-          $zip = 'artifacts/Nivetray-${{ matrix.runtime }}.zip'
-          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  Nivetray-${{ matrix.runtime }}.zip" | Set-Content "$zip.sha256" -Encoding ascii
+          [xml]$props = Get-Content Directory.Build.props
+          if ($env:GITHUB_REF_NAME -ne ('v' + $props.Project.PropertyGroup.Version)) { throw 'Tag does not match project version' }
+      - name: Build and verify portable package
+        shell: pwsh
+        run: ./scripts/BuildPortable.ps1 -Runtime ${{ matrix.runtime }}
       - uses: actions/upload-artifact@v4
         with:
           name: Nivetray-${{ matrix.runtime }}
@@ -43,7 +51,7 @@ jobs:
             artifacts/*.sha256
           if-no-files-found: error
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'workflow_dispatch' && inputs.draft_release && startsWith(github.ref, 'refs/tags/v')
     needs: portable
     runs-on: ubuntu-latest
     permissions:
@@ -57,4 +65,4 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --generate-notes --title "Nivetray $GITHUB_REF_NAME"
+        run: gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --verify-tag --draft --generate-notes --title "Nivetray $GITHUB_REF_NAME"

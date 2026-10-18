@@ -2,101 +2,91 @@
 
 **Keep it running. Keep it hidden.**
 
-Nivetray is a small, open-source Windows tray utility that hides application **windows** without closing, suspending, or terminating their processes. Keep a development server, terminal session, or desktop application running while clearing your taskbar.
+Nivetray hides application windows in the Windows notification area without closing, suspending or terminating their processes. Clear your taskbar while a server, terminal session or desktop app keeps working.
 
-## MVP features
+## A calmer workspace
 
-- Browse actual visible, titled top-level windows, with application name, executable icon and path.
-- Search by title, application name or executable path. Windows from the same process remain separate entries.
-- Hide a selected window and restore it individually or restore all.
-- Use the tray menu to restore windows, open the searchable hidden-window panel, or access settings.
-- Remember applications and configure explicit Include / Exclude rules by executable path. Remembered applications sort first; nothing is hidden automatically.
-- Restore all tracked windows on normal exit. If restoration fails, exit is cancelled so you can retry.
-- Save preferences locally as JSON. No telemetry, accounts, credentials, network service or administrator requirement.
+- Find real application windows by title, app name or executable path. Hide one window with its **Hide** button.
+- Restore windows individually, restore all, or search the full hidden-window list. Recovery states stay visible when Windows cannot confirm an operation.
+- Use a recognizable tray icon: double-click to reopen Nivetray; right-click for the eight most recently hidden windows, **View all / Search**, settings and safe exit.
+- Favorite an app, exclude it, or explicitly include compatible helper windows. Nothing hides automatically.
+- Choose light, dark or system theme. Windows high contrast overrides the palette. Keyboard shortcuts and accessible action names are built in.
+- Preferences stay in local JSON. No accounts, credentials, telemetry, network connections, injected code or normal-use administrator requirement.
 
-The optional fourth title-bar button is **designed, not implemented** in this MVP. See [overlay design](docs/overlay-design.md) for the separate implementation and validation gate.
+![Nivetray available windows in light theme](docs/images/available-light.png)
 
-## Requirements and build
+![Nivetray hidden windows in dark theme](docs/images/hidden-dark.png)
 
-- Windows 10/11 are the target platforms; local execution has been verified on Windows 11 x64. Windows 10 and ARM64 execution still need compatibility runs. Microsoft's [.NET supported OS policy](https://github.com/dotnet/core/blob/main/release-notes/10.0/supported-os.md) applies to runtime vendor support, including the Windows 10 edition/lifecycle restrictions.
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) for building. Visual Studio with the .NET desktop workload is optional.
+These are real screenshots of isolated test windows, not mockups or personal apps.
+
+## Get started
+
+Download a portable ZIP from an approved release, or download the `Nivetray-win-x64` / `Nivetray-win-arm64` artifact from [GitHub Actions](https://github.com/maxgab201/Nivetray/actions). Workflow artifacts contain a ZIP and a SHA-256 file; unpack the complete application ZIP and run `Nivetray.exe`. The self-contained package includes .NET and needs no installer. Builds are unsigned. Version 0.2.0 is currently unreleased; successful CI does not constitute release approval.
+
+1. Open Nivetray and find your application under **Available windows**. Use the search field or **Refresh**.
+2. Choose **Hide** next to its window. The application stays running.
+3. Open **Hidden windows**, or the Nivetray tray menu, to restore it.
+4. Choose **Restore all and exit** to quit safely. Closing the panel keeps Nivetray in the tray by default; this is configurable. Minimize uses the taskbar, while **Send Nivetray to tray** hides only this panel.
+
+**Ctrl+F** focuses the current search field; **F5** refreshes windows; **Escape** sends the panel to the tray. Opening Nivetray again reopens its existing instance. Normal exit queues behind a pending hide and restores managed windows before shutting down.
+
+## Applications and rules
+
+- **Favorite** is an independent checkbox that moves an executable near the top. It can be combined with a helper-window rule; it never hides or launches an app.
+- **Show standard windows** keeps normal filtering for that app (the default).
+- **Include helper windows** (legacy `Include`) allows its compatible visible, titled owned/tool windows.
+- **Exclude from list** (legacy `Exclude`) removes that executable from detection; it wins over the global helper-window preference.
+
+Use **Applications** to search, add, browse for an executable, or remove a rule. Settings can show helper windows globally, but system surfaces, invisible/cloaked/untitled windows, Nivetray itself and uncertain identities remain protected. A favorite is separate from an advanced helper-window exception; neither authorizes future automatic behavior.
+
+Terminal windows belong to their host, such as `conhost.exe`, `OpenConsole.exe` or `WindowsTerminal.exe`, which can differ from the server or shell inside. Nivetray manages the whole window, including all of its tabs. It is not a terminal emulator or process manager. File Explorer windows are eligible; desktop/taskbar surfaces are excluded.
+
+## Recovery and limits
+
+Nivetray checks HWND, PID, process start time, owning thread, class and an independent lifetime stamp. Lost authorization is **not** treated as successful restoration: a live entry remains tracked, and authorization can be reacquired only when the original lifetime is verified. An unavailable identity is retained without touching a window. Only confirmed destruction or replacement removes an obsolete entry.
+
+If recovery needs attention, keep Nivetray running and retry **Restore**. Let an unresponsive app recover, dismiss its permission prompt if present, or use its own Show/Open command when available. **Copy recovery details** provides IDs and categorical errors without titles or paths. Exiting is cancelled while recovery remains unresolved; the panel and tray stay available. See [safety details](docs/safety.md).
+
+There is no crash watchdog. Forced termination, power loss or Windows shutdown cannot guarantee restoration. Live HWNDs are never saved for reuse in another session. Win32 cannot make identity validation and a foreign-window operation atomic, and asynchronous requests can complete late. Same-user malicious interference is outside this accidental-reuse protection. Some apps change their own behavior when hidden; Nivetray cannot override that.
+
+The fourth title-bar button is **not implemented**. The [overlay feasibility design](docs/overlay-design.md) remains a separate, disabled future phase.
+
+## Compatibility and privacy
+
+Target: Windows 10/11, x64 and ARM64. Actual local validation: **Windows 11 x64**, WinForms fixtures and WPF UI moved between the available 96/144-DPI monitors in per-monitor awareness mode, including normal/minimized/maximized windows and a continuing TCP server. The dedicated console test reports SKIP on this desktop's invisible/pseudoconsole host. CMD, Windows PowerShell, PowerShell 7, Windows Terminal, OpenConsole, Windows 10 and physical ARM64 execution need dedicated compatibility runs. Cross-publishing ARM64 is not execution testing. See [verification](docs/verification.md) and Microsoft's [.NET OS support policy](https://github.com/dotnet/core/blob/main/release-notes/10.0/supported-os.md).
+
+Default data folder: `%LOCALAPPDATA%\Nivetray`. `settings.json` stores theme, behavior and executable rules, not titles or live HWNDs. Existing preferences migrate to schema 3 without changing rule effects: legacy Manage becomes Standard plus IsFavorite, while Include and Exclude retain their visibility behavior. A malformed original is backed up before a later explicit save. `diagnostics.log` uses categorical errors, deduplicates repeats for one minute and rotates with one 256 KiB backup. Nothing is transmitted. Custom profiles are supported with `Nivetray.exe --data-directory "C:\MyData\Nivetray"`; GUI tests use an isolated profile under ignored artifacts. Startup with Windows is not implemented.
+
+## Build, test and package
+
+Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) on Windows. Visual Studio's .NET desktop workload is optional.
 
 ```powershell
 git clone https://github.com/maxgab201/Nivetray.git
 cd Nivetray
 dotnet build Nivetray.sln -c Release
 dotnet run --project src/Nivetray.App -c Release
-```
-
-The app runs with the current user's permissions (`asInvoker`). Elevated, protected, or inaccessible applications may be excluded. Do not elevate Nivetray for normal use.
-
-## Use
-
-1. Open the applications you want to manage. Launch Nivetray and click **Refresh**.
-2. Search and select a window, then click **Hide selected window**.
-3. Restore it from the tray's **Restore: …** entries or the **Hidden windows** tab. The tray menu also opens a searchable panel for long lists.
-4. Select **Remember application** to prioritize that executable in future lists. Use **Settings** for rules.
-5. Closing the panel keeps Nivetray in the tray by default. Choose **Restore all and exit** to stop it safely. Disable close-to-tray if you prefer closing the panel to restore everything and exit.
-
-If no windows appear, open a conventional application and refresh. Invisible, untitled, cloaked, shell/system, and Nivetray's own windows are always excluded. Owned/helper and tool windows are excluded unless their executable has an **Include** rule. File Explorer windows are supported; the desktop and taskbar are excluded by window class. Console hosts are represented by the window-owning executable (for example `conhost.exe`, `OpenConsole.exe` or `WindowsTerminal.exe`), which can differ from the command running inside them. Nivetray manages whole windows, not individual terminal tabs.
-
-## Portable package
-
-```powershell
-dotnet publish src/Nivetray.App -c Release -r win-x64 --self-contained true -o artifacts/portable/win-x64
-Compress-Archive -Path artifacts/portable/win-x64/* -DestinationPath artifacts/Nivetray-win-x64.zip
-```
-
-Use `win-arm64` for native ARM64. Extract the **whole ZIP** into a writable location and run `Nivetray.exe`. No installer or preinstalled .NET runtime is needed for the self-contained package. Preferences remain in your user profile; portable refers to installation, not settings storage. Packages are unsigned and Windows may show a reputation warning.
-
-GitHub Actions builds, tests and uploads both portable architectures on pushes and pull requests. Pushing a `v*` tag also publishes ZIPs and SHA-256 checksums as a GitHub release. ARM64 is cross-published; the CI test runner executes x64 tests.
-
-## Tests
-
-The dependency-free test executable returns a nonzero exit code on failure; **`dotnet test` is not the test runner** for this repository.
-
-```powershell
-# Deterministic filtering, identity, recovery and settings tests (also run in CI)
 dotnet run --project tests/Nivetray.Tests -c Release
-
-# Requires an interactive Windows desktop. Creates only its own test windows.
-dotnet run --project tests/Nivetray.Tests -c Release -- --native
-
-# WPF end-to-end smoke test; close existing Nivetray instances first.
-dotnet build Nivetray.sln -c Release
-powershell -NoProfile -ExecutionPolicy Bypass -File tests/UiSmoke.ps1 `
-  -AppPath ./src/Nivetray.App/bin/Release/net10.0-windows/Nivetray.exe
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/BuildPortable.ps1 -Runtime win-x64
 ```
 
-Native integration tests hide one of two windows from a dedicated fixture, verify the other is visible, confirm a TCP server still responds, and restore the hidden window. Fixtures exit automatically after 30 seconds. The UI smoke test exercises search, manual selection, hiding, restoration and restore-on-exit. Neither test targets existing user application windows.
+Use `win-arm64` to cross-publish ARM64. The packaging script verifies expected files and SHA-256. CI runs Release builds and deterministic tests, then uploads both architectures. Public releases are never automatic: an explicitly requested workflow can prepare a draft for an existing version tag. See the [testing guide](docs/testing.md) for interactive Win32 / UI Automation commands and release gates. `dotnet test` is not this repository's test runner.
 
-## Architecture
+## Architecture and performance
 
 ```text
-src/Nivetray.Core       Models, filtering, hide/restore lifecycle, JSON preferences
-src/Nivetray.Windows    Win32 P/Invoke, enumeration, lifetime stamps, visibility requests
-src/Nivetray.App        WPF panel, WinForms NotifyIcon, application lifecycle
-tests/Nivetray.Tests    Deterministic tests and real-window/TCP fixture
-tests/UiSmoke.ps1       WPF UI Automation integration test
-docs/                  Safety model, overlay proposal, verification notes
+src/Nivetray.Core       Identity/recovery lifecycle, filtering/search, tray policy, JSON
+src/Nivetray.Windows    Limited-rights Win32 discovery and bounded visibility operations
+src/Nivetray.App        WPF workspace, theme/icon/log services, tray and app lifecycle
+tests/                 Deterministic regressions, isolated native fixtures, UI Automation
+scripts/               Verified portable packaging
+docs/                  Audit, safety, QA, screenshots and overlay feasibility
 ```
 
-Only the Windows adapter calls Win32 APIs. The core uses an injectable `IWindowPlatform`. There are no production NuGet dependencies. Detection runs on demand and when the panel is activated, with no background polling or process-list scanning. Icon caching is bounded. No injection, global hooks, process termination, or process suspension APIs are used.
+No production NuGet dependencies. Detection and icon IO run off the dispatcher; refresh requests coalesce without permanent polling. Frozen icons are bounded to 64 executables, with one outstanding loader, a 250 ms caller wait and shutdown cancellation. No cache lock spans shell IO. Tray items are bounded and disposed. This static WPF utility uses software rendering: local comparative measurements substantially reduced private memory while keeping sampled idle CPU at 0%. Short refresh samples stabilized; they do not certify days-long leak freedom. Detailed before/after measurements and remaining tests are in [verification](docs/verification.md).
 
-## Safety, privacy and limitations
+## Contribute and license
 
-- Window identity includes HWND, process ID, process start time, thread, class and a per-window lifetime stamp. A second property authorizes hide/restore. Stale handles and removed stamps are rejected, including reuse within the same process. All identity checks are repeated before each visibility request. Win32 cannot make validation and a foreign-window operation atomic; see [safety notes](docs/safety.md).
-- Visibility uses `ShowWindowAsync` and confirmation with a timeout so an unresponsive app does not block the panel. Failed operations remain available for recovery. Original normal, maximized or minimized state is used when restoring; restore does not force keyboard focus.
-- Hiding does not terminate or suspend processes or their children. Some applications themselves throttle or alter behavior when hidden; Nivetray cannot override that behavior.
-- Normal **Nivetray exit** restores tracked windows. Process crashes, forced termination, OS shutdown, or power loss cannot guarantee restoration. Do not force-stop Nivetray while it has hidden windows. There is no crash-recovery watchdog in this MVP. Tracked HWNDs are deliberately not persisted between runs.
-- Apps with custom window lifecycles, exclusive fullscreen, protected/elevated processes, virtual desktops and console-host variations require compatibility testing. A window destroyed by its application is discarded, never replaced with another window from that process.
-- `%LOCALAPPDATA%\Nivetray\settings.json` stores `CloseToTray` and executable rules. No window titles or live window handles are stored there. Malformed settings fall back to defaults and remain untouched until you explicitly save a preference.
-- `%LOCALAPPDATA%\Nivetray\diagnostics.log` records error categories, with one rotated backup at 256 KiB. It omits titles, executable paths and credentials. Logs are local and never transmitted. Delete this folder after exiting Nivetray to remove its local data.
-
-## Contributing
-
-Keep changes modular, add a regression case for identity or restoration changes, run the documented tests, and include Windows version and reproduction steps in compatibility reports. Do not include sensitive window titles or paths in public reports. See [verification notes](docs/verification.md) for the current validation scope.
-
-## License
+Read [CONTRIBUTING](CONTRIBUTING.md), [security notes](SECURITY.md) and the [changelog](CHANGELOG.md). Compatibility reports should contain sanitized reproduction steps, not personal titles or screenshots.
 
 [MIT](LICENSE) — Copyright (c) 2026 maxgab201 and Nivetray contributors.

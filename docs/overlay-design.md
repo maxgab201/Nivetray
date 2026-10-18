@@ -1,6 +1,6 @@
 # Optional fourth title-bar button: proposed design
 
-Status: design only. The MVP's manual hide/restore path must remain usable independently. No overlay code, injection or foreign subclassing is part of version 0.1.
+Status: feasibility reviewed after 0.2 hardening and UI work; design only. No overlay code, injection or foreign subclassing is enabled. A prototype is not justified until real mixed-DPI and terminal-custom-chrome coverage is available. Manual hide/restore remains independent.
 
 ## Module boundary
 
@@ -24,6 +24,8 @@ Add a future `Nivetray.Overlay` Windows-only assembly depending on Core and Wind
 ## Interaction and failure handling
 
 The hit region belongs only to the new button, with an accessible name ("Hide window in Nivetray"), keyboard alternative via the main panel, tooltip and high-contrast support. A click uses the exact selected lifetime identity; failed validation hides the overlay and logs a categorical reason. Tray recovery remains available if the overlay fails. A per-app disable switch takes effect immediately. Exceptions dispose the overlay, never propagate into the foreign app or disable manual restoration.
+
+The coordinator must honor the new recovery state machine: lost authorization can be reacquired only from a verified independent lifetime stamp; unavailable identities retain recovery and cannot authorize a click. Never restamp an ambiguous target during geometry discovery. An explicit overlay-eligibility setting must be separate from Favorite and Include helper windows. Do not interpret migrated Manage rules as opt-in. Queue click commands through the same serialized manager and disable its hit region while a target operation is pending.
 
 ## Implementation gate and acceptance matrix
 
